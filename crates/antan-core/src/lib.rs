@@ -13,6 +13,7 @@ pub mod material;
 pub mod mechanics;
 pub mod solver;
 pub mod templates;
+pub mod yagi;
 
 pub use farfield::{FarField, Pattern, PatternSummary};
 pub use geometry::{Antenna, Source, Vec3, Wire};

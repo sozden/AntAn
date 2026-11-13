@@ -35,9 +35,11 @@ pub fn field(sol: &Solution, theta: f64, phi: f64) -> FarField {
     let ph = [-phi.sin(), phi.cos(), 0.0];
     let (mut st, mut sp) = (Complex64::new(0.0, 0.0), Complex64::new(0.0, 0.0));
     for (b, i) in sol.basis.iter().zip(&sol.currents) {
-        let w = i * Complex64::from_polar(1.0, k * dot(r, b.pos));
-        st += w * dot(b.dl, th);
-        sp += w * dot(b.dl, ph);
+        for (mid, dl) in b.halves() {
+            let w = i * Complex64::from_polar(1.0, k * dot(r, mid));
+            st += w * dot(dl, th);
+            sp += w * dot(dl, ph);
+        }
     }
     let c = Complex64::new(0.0, -2.0 * PI * sol.frequency * MU0 / (4.0 * PI));
     FarField { e_theta: c * st, e_phi: c * sp }
