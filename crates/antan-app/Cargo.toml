@@ -1,0 +1,10 @@
+[package]
+name = "antan"
+version.workspace = true
+edition.workspace = true
+description = "AntAn — anten analiz ve hesaplama programı"
+
+[dependencies]
+antan-core = { path = "../antan-core" }
+eframe = "0.35.0"
+png = "0.18"

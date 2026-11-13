@@ -1,0 +1,10 @@
+[package]
+name = "antan-core"
+version.workspace = true
+edition.workspace = true
+description = "AntAn çekirdeği: tel anten geometrisi, moment yöntemi çözücüsü, uzak alan, eşleme ve mekanik hesaplar"
+
+[dependencies]
+num-complex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
