@@ -118,6 +118,49 @@ impl YagiDesign {
         self.build_with_map().0
     }
 
+    /// Sürülen elemanın boyunu, besleme reaktansı hedefe eşit olana kadar ayarlar
+    /// (sekant yöntemi, gerçek çözücüyle). `target(Z)` istenen reaktansı verir.
+    /// Başarılıysa yeni tasarım ve son empedans döner.
+    pub fn tune_driven(&self, target: impl Fn(num_complex::Complex64) -> Option<f64>) -> Option<(YagiDesign, num_complex::Complex64)> {
+        let f = self.frequency;
+        let eval = |len: f64| -> Option<(f64, num_complex::Complex64)> {
+            let mut d = self.clone();
+            d.elements[self.driven].length = len;
+            let z = crate::solver::solve(&d.build(), f).ok()?.impedance();
+            Some((z.im - target(z)?, z))
+        };
+        let mut l0 = self.elements.get(self.driven)?.length;
+        let (mut f0, _) = eval(l0)?;
+        let mut l1 = l0 * if f0 > 0.0 { 0.99 } else { 1.01 };
+        for _ in 0..25 {
+            let (f1, z1) = eval(l1)?;
+            if f1.abs() < 0.05 {
+                let mut d = self.clone();
+                d.elements[self.driven].length = l1;
+                return Some((d, z1));
+            }
+            let slope = (f1 - f0) / (l1 - l0);
+            if slope.abs() < 1e-12 {
+                return None;
+            }
+            let step = (-f1 / slope).clamp(-0.05 * l1, 0.05 * l1);
+            (l0, f0) = (l1, f1);
+            l1 += step;
+        }
+        None
+    }
+
+    /// Tüm boyutları `k` ile ölçekler (boru çapları hariç).
+    pub fn scale(&mut self, k: f64) {
+        for e in &mut self.elements {
+            e.x *= k;
+            e.length *= k;
+        }
+        for s in &mut self.profile.sections {
+            s.half_length *= k;
+        }
+    }
+
     /// Elemanları bum konumuna göre sıralar (sürülen eleman izlenir).
     pub fn sort(&mut self) {
         let driven_name = self.elements.get(self.driven).map(|e| (e.name.clone(), e.x, e.length));

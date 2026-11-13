@@ -1,46 +1,115 @@
 # AntAn
 
-Eznec/MMANA tarzı bir anten analiz ve hesaplama programı — Rust ile, sıfırdan.
+EZNEC/MMANA tarzı, sıfırdan Rust ile yazılmış bir **anten analiz ve hesaplama programı**.
+Kendi moment yöntemi (MoM) çözücüsü, eleman bazlı Yagi tasarımı (kademeli/teleskopik borular
+dahil), 3B ışıma diyagramı, Smith abağı, eşleme hesapları ve otomatik iyileştirme içerir.
 
-## Neler var (v0.1 iskelet)
+![3B diyagram — 7 elemanlı kademeli borulu Yagi](docs/3b-kademeli-yagi.png)
 
-- **antan-core**: arayüzden bağımsız hesap motoru
-  - İnce tel moment yöntemi (MoM) çözücüsü, serbest uzay, karışık potansiyel formülasyonu
-  - Boru/çubuk elemanlar: dış çap + et kalınlığı (içi dolu da olabilir), malzeme seçimi
-    (alüminyum 6063/6061, bakır, pirinç, paslanmaz, kayıpsız) → deri etkisi dahil iç empedans
-  - Uzak alan, kazanç/yönlülük, 3B örüntü, yatay/düşey kesitler, huzme genişliği, ön/arka oranı
-  - Eşleme: SWR/dönüş kaybı, L devresi, hairpin (beta), gamma eşleme
-  - Mekanik: kütle, kendi ağırlığıyla sarkma, rüzgâr yükü
-  - Şablonlar: dipol, N elemanlı Yagi-Uda (N ≥ 2)
-  - `tests/validation.rs`: ince yarım dalga dipol (~73+j42 Ω, 2.15 dBi), 3/5 elemanlı Yagi
-    için enerji korunumu (kazanç = yönlülük), yönlülük kontrolü, parça sayısına göre yakınsama
-- **antan-app**: egui tabanlı masaüstü arayüz
-  - Eleman ağacı + özellik paneli (boy, bum konumu, çap, et kalınlığı, malzeme, parça sayısı)
-  - Döndürülebilir 3B tel-kafes ışıma diyagramı
-  - Yatay/düşey kutupsal kesitler + akım dağılımı grafiği
-  - SWR/frekans taraması ve tablosu
-  - Eşleme sekmesi: L devresi, hairpin, gamma sonuçları bir arada
-  - `ANTAN_AUTOSHOT=<yol>` / `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching` ortam değişkenleri,
-    etkileşimsiz doğrulama için otomatik ekran görüntüsü alıp kapanır.
+| Kesitler ve akımlar | SWR, empedans ve Smith |
+|---|---|
+| ![](docs/kesitler.png) | ![](docs/swr-smith.png) |
+| **Moxon (tel modeli)** | **İyileştirme** |
+| ![](docs/moxon.png) | ![](docs/iyilestirme.png) |
+
+## Özellikler
+
+**Modeller**
+- **Yagi tasarımı (eleman bazlı):** elemanlar mm cinsinden bum konumu ve uçtan uca boy ile
+  düzenlenir. Ortak **boru profili**: ortadan uca kalınlaşan/incelen bölümler (ör. 16 → 12 → 10 mm),
+  her bölüm için dış çap, içi dolu / boru ve et kalınlığı, malzeme seçimi.
+- **Tel modeli:** her tel başlangıç/bitiş koordinatı (mm), çap, et kalınlığı, malzeme, parça sayısı.
+  Teller uç uca değdiğinde otomatik **birleşim** oluşur (köşe, T, radyal yıldız).
+- Şablonlar: 2–11 elemanlı Yagi, kademeli Yagi örneği, yarım dalga dipol, ters V, katlanmış dipol,
+  2 elemanlı quad, delta loop, ground plane (eğik radyalli), Moxon dikdörtgeni.
+- Malzemeler: Al 6063-T6, Al 6061-T6, bakır, pirinç, paslanmaz 304, kayıpsız.
+
+**Analiz**
+- Giriş empedansı, SWR, dönüş kaybı, ışıma verimi (deri etkisi ve boru et kalınlığıyla iletken kaybı).
+- Kazanç (dBi/dBd), yönlülük, ön/arka oranı, yatay/düşey −3 dB huzme genişliği.
+- **3B diyagram:** aydınlatmalı, kazanca göre renklendirilmiş yüzey; ortada akım genliğine göre
+  renkli anten; döndürme, yakınlaştırma, hazır bakışlar (3B/üst/yan/ön), renk ölçeği.
+- Yatay ve düşey **kutupsal kesitler** (fareyle okuma), elemanlar boyunca **akım dağılımı**.
+- **Frekans taraması** (arka planda, tüm çekirdeklerde paralel): SWR, R/X grafikleri,
+  **Smith abağı**, 2:1 bant genişliği, değer tablosu.
+
+**Eşleme**
+- L devresi (tüm çözümler, kontrol empedansıyla), hairpin (beta) boyu ve endüktansı,
+  gamma çubuğu boyu ve seri kondansatörü.
+- **Sürülen elemanı otomatik ayarla:** rezonansa (X = 0) veya hairpin için gereken kapasitif
+  reaktansa, gerçek çözücüyle yinelenerek.
+
+**İyileştirme (Yagi)**
+- Nelder-Mead; hedefler: kazanç, ön/arka (tavanlı), SWR; isteğe bağlı bant (±%) değerlendirmesi;
+  bum boyunu koruma, konumları sabit tutma seçenekleri. Arka planda çalışır, ilerleme grafiği,
+  eleman bazında Δ boy tablosu; sonuç tek tıkla uygulanır (Ctrl+Z ile geri alınır).
+
+**Mekanik**
+- Eleman kütlesi, ortadan tutulan **kademeli elemanın kendi ağırlığıyla uç sarkması**
+  (sayısal konsol kiriş), rüzgâr alanı ve verilen hızda rüzgâr kuvveti.
+
+**Dosya**
+- Proje: `.antan` (JSON, okunabilir). NEC-2 kart dosyası dışa aktarımı (4nec2/xnec2c/EZNEC ile
+  karşılaştırma için). Pencereyi PNG kaydetme. Geri al/yinele (Ctrl+Z / Ctrl+Y), Ctrl+O / Ctrl+S.
+- Bant düğmeleri (10 m … 23 cm), isteğe bağlı olarak geometriyi yeni frekansa ölçekler.
 
 ## Çalıştırma
 
 ```
-cargo run -p antan
+cargo run --release -p antan
 ```
 
-## Bilinen sınırlar / yol haritası
+Testler (çözücü doğrulamaları dahil):
 
-- Tel birleşimleri (junction / T-bağlantı) yok — her eleman bağımsız, kesişmemeli.
-- Toprak düzlemi / gerçek zemin etkisi yok (yalnız serbest uzay).
-- Kademeli (teleskopik, farklı çaplı bölümlerden oluşan) elemanlar henüz yok.
-- Yalnız dipol ve Yagi-Uda şablonları var; quad, loop, vertikal, log-periyodik vb. eklenmeli.
-- Gamma eşleme modeli yaklaşıktır (Healey yöntemi); NEC/ölçümle doğrulanmalı.
-- Sağ özellik panelinde metin sola hafif taşıyor (kozmetik, iç kenar boşluğu ayarlanmalı).
-- Otomatik eleman optimizasyonu (boy/aralık ayarı) yok.
-- Proje/anten kaydetme-yükleme (JSON serileştirme çekirdekte hazır) arayüze bağlanmadı.
+```
+cargo test --workspace --release
+```
 
-İskelet buraya kadar: mimari oturdu, fizik doğrulandı (bkz. `tests/validation.rs`), arayüz
-çalışıyor ve ekran görüntüsü alınabiliyor. Devamı (daha fazla anten türü, kademeli elemanlar,
-optimizasyon, Smith chart, dosya kaydetme/yükleme, arayüz cilası) için daha güçlü bir modele
-devredilmesi planlanıyor.
+## Mimari
+
+```
+crates/
+  antan-core/   arayüzden bağımsız hesap motoru
+    solver.rs     MoM çözücü (birleşimler, birleşimden besleme, iletken kaybı)
+    farfield.rs   uzak alan, kazanç, örüntü özeti, kesitler
+    yagi.rs       eleman bazlı Yagi tasarımı, kademeli profil, sürülen eleman ayarı
+    templates.rs  tel modeli şablonları
+    matching.rs   SWR, L devresi, hairpin, gamma
+    optimize.rs   Nelder-Mead iyileştirici
+    mechanics.rs  kütle, kademeli kiriş sarkması, rüzgâr
+    material.rs   malzemeler, boru iç empedansı (deri etkisi)
+    nec.rs        NEC-2 dışa aktarımı
+    tests/        doğrulama testleri
+    examples/explore.rs  şablon boyutlarını taramak için keşif aracı
+  antan-app/    egui masaüstü arayüzü (koyu tema)
+```
+
+Eksenler: +X bum yönü (ileri), Y eleman ekseni, +Z yukarı. Birimler çekirdekte SI, arayüzde mm.
+
+## Çözücü ve doğrulama
+
+İnce tel moment yöntemi, Harrington'ın karışık potansiyelli darbe tabanlı / nokta eşlemeli
+formülasyonu; indirgenmiş çekirdek, tekil kısım analitik. N telin buluştuğu noktada N−1 birleşim
+tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Testlerle doğrulananlar:
+
+- İnce yarım dalga dipol ≈ 73 + j42 Ω, 2.15 dBi; parça sayısıyla yakınsama
+- Kayıpsız antenlerde enerji korunumu (kazanç = yönlülük, ±0.05 dB) — birleşimli antenler dahil
+- GP tabanında Kirchhoff akım yasası; birleşimden besleme = ortadan besleme
+- Üç parçaya bölünmüş dipol = tek parça dipol
+- Katlanmış dipol ≈ eşdeğer yarıçap modeli; Moxon, quad için ileri yönlülük ve yüksek Ö/A
+- İletken iç empedansının DC ve deri etkisi sınırları; L devresi/hairpin çözümlerinin geri kontrolü
+
+Şablon boyutlarının bir kısmı (quad, delta, GP, Moxon için ×1.012) bu çözücüyle taranarak
+ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
+
+Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
+bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp`, `ANTAN_AUTOSHOT_OPTIM=<adım>` ek seçeneklerdir.
+
+## Yol haritası
+
+- Toprak etkisi: önce kusursuz zemin (görüntü yöntemi), sonra gerçek zemin (yansıma katsayısı)
+- Metal bum düzeltmesi (bumdan geçen / yalıtılmış elemanlar)
+- Yüklemeler (bobin/kondansatör/trap), çoklu kaynak ve faz besleme, yığınlama (stacking)
+- MMANA `.maa` ve NEC içe aktarma; PDF/HTML rapor
+- Türkçe/İngilizce dil seçeneği

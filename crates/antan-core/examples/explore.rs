@@ -113,6 +113,21 @@ fn main() {
         println!("{p}: {:.1}", solver::solve(&a, f).unwrap().impedance());
     }
 
+    println!("--- GP: dikey / radyal boyu (45°) ---");
+    let fg = 145.0e6;
+    let lg = antan_core::C0 / fg;
+    for (v, r) in [(0.245, 0.25), (0.235, 0.25), (0.23, 0.25), (0.235, 0.26), (0.24, 0.27)] {
+        let mut a = templates::ground_plane(fg, 45.0, &Tube::aluminum(0.008, Some(0.001)));
+        a.wires[0].end[2] = v * lg;
+        for w in &mut a.wires[1..] {
+            let k = r / 0.25;
+            for i in 0..3 {
+                w.end[i] *= k;
+            }
+        }
+        println!("dikey {v} radyal {r}: {:.1}", solver::solve(&a, fg).unwrap().impedance());
+    }
+
     println!("--- Moxon ölçek ---");
     for k in [1.000, 1.008, 1.012, 1.016, 1.02] {
         let mut a = templates::moxon(f, &t);

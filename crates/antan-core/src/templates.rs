@@ -158,9 +158,10 @@ pub fn delta_loop(frequency: f64, tube: &Tube) -> Antenna {
 }
 
 /// Dikey çeyrek dalga + 4 radyal, radyaller `droop_deg` kadar aşağı eğik. Tabandan besleme.
+/// Dikey 0.228λ: 45° eğik radyallerle bu çözücüde rezonans (~55 Ω).
 pub fn ground_plane(frequency: f64, droop_deg: f64, tube: &Tube) -> Antenna {
     let lambda = C0 / frequency;
-    let v = 0.245 * lambda;
+    let v = 0.228 * lambda;
     let r = 0.25 * lambda;
     let d = droop_deg.to_radians();
     let mut wires = vec![wire("Dikey", [0.0; 3], [0.0, 0.0, v], tube)];

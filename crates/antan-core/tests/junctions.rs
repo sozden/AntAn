@@ -134,6 +134,22 @@ fn quad_and_moxon_are_directional() {
     }
 }
 
+/// Sürülen eleman ayarı: rezonans (X = 0) ve hairpin (X = −√(R(Z₀−R))).
+#[test]
+fn tune_driven_element() {
+    let f = 144.3e6;
+    let d = YagiDesign::standard(f, 4, Profile::uniform(Tube::aluminum(0.01, None)));
+    let (res, z) = d.tune_driven(|_| Some(0.0)).unwrap();
+    println!("rezonans: L {:.1} → {:.1} mm, Z {z:.2}", d.elements[1].length * 1e3, res.elements[1].length * 1e3);
+    assert!(z.im.abs() < 0.1);
+    // Hairpin R < Z₀ ister: 3 elemanlı tasarımda R ≈ 25 Ω.
+    let d = YagiDesign::standard(f, 3, Profile::uniform(Tube::aluminum(0.01, None)));
+    let (hp, z) = d.tune_driven(|z| (z.re < 50.0).then(|| -(z.re * (50.0 - z.re)).sqrt())).unwrap();
+    let h = antan_core::matching::hairpin(z, 50.0, f, 0.004, 0.03).unwrap();
+    println!("hairpin: L {:.1} mm, Z {z:.2}, saplama {:.1} mm", hp.elements[1].length * 1e3, h.length * 1e3);
+    assert!(h.reactance_change.abs() < 0.1);
+}
+
 /// Kademeli profil, aynı çaplı bölümlerle tekdüze elemanla aynı sonucu vermeli;
 /// incelen uçlar rezonansı yukarı kaydırmalı (aynı boyda daha kapasitif).
 #[test]

@@ -5,10 +5,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::MU0;
 
+/// JSON sonsuz sayı taşıyamaz: sonsuz değer `null` olarak yazılıp okunur.
+mod inf_as_null {
+    use serde::{Deserialize, Deserializer, Serializer};
+    pub fn serialize<S: Serializer>(v: &f64, s: S) -> Result<S::Ok, S::Error> {
+        if v.is_finite() { s.serialize_some(v) } else { s.serialize_none() }
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+        Ok(Option::<f64>::deserialize(d)?.unwrap_or(f64::INFINITY))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Material {
     pub name: String,
     /// İletkenlik (S/m). `f64::INFINITY` kayıpsız iletken demektir.
+    #[serde(with = "inf_as_null")]
     pub conductivity: f64,
     /// Yoğunluk (kg/m³).
     pub density: f64,

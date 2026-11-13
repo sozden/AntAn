@@ -11,6 +11,8 @@ pub mod linalg;
 pub mod matching;
 pub mod material;
 pub mod mechanics;
+pub mod nec;
+pub mod optimize;
 pub mod solver;
 pub mod templates;
 pub mod yagi;
