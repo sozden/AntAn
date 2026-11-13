@@ -2,6 +2,9 @@
 name = "antan"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 description = "AntAn — anten analiz ve hesaplama programı"
 
 [dependencies]

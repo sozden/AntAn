@@ -161,8 +161,37 @@ bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|
 - MMANA `.maa` ve NEC içe aktarma; PDF/HTML rapor
 - Türkçe/İngilizce dil seçeneği
 
-## Kaynaklar (bum düzeltmesi)
+## Kaynaklar ve atıflar
+
+Yöntemler ve formüller yayımlanmış literatürden alınmış, kod sıfırdan yazılmıştır:
+
+- Moment yöntemi: R. F. Harrington, *Field Computation by Moment Methods* (1968) — karışık
+  potansiyelli darbe tabanlı / nokta eşlemeli formülasyon
+- Gerçek zemin: Fresnel yansıma katsayıları; MININEC/MMANA'daki yansıma katsayısı yaklaşımı
+- Moxon boyutları: L. B. Cebik (W4RNL), MoxGen eğri uydurması
+- Tuzaklı dipol şablonu: C. L. Buchanan (W3DZZ) tasarımı
+- Katlanmış dipol karşılaştırması: eşdeğer yarıçap modeli (klasik anten ders kitapları)
+
+### Bum düzeltmesi
 
 - [SM5BSZ — Boom corrections from various sources](https://sm5bsz.com/antennas/sa/others.htm)
 - [YU1AW — Yagi boom correction](https://www.qsl.net/yu1aw/Misc/yagi_boom_correction.pdf)
 - [DK7ZB — Yagi details](https://www.qsl.net/d/dk7zb/2m-short/detail.htm)
+
+## Lisans
+
+AntAn, isteğinize göre aşağıdakilerden biriyle lisanslanmıştır:
+
+- Apache Lisansı 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT Lisansı ([LICENSE-MIT](LICENSE-MIT))
+
+Aksini açıkça belirtmedikçe, bu projeye kasıtlı olarak gönderdiğiniz her katkı, Apache-2.0
+lisansında tanımlandığı şekilde, ek koşul olmaksızın yukarıdaki gibi çift lisanslı kabul edilir.
+
+### Üçüncü taraf bileşenler
+
+Bağımlılıkların tamamı izin verici lisanslıdır (MIT, Apache-2.0, BSD, Zlib, ISC, BSL-1.0,
+Unicode-3.0); ayrıntı için `cargo metadata`. Derlenmiş programa gömülen egui varsayılan yazı
+tipleri (Ubuntu, Noto Emoji) Ubuntu Font Licence 1.0 ve SIL Open Font License 1.1 kapsamındadır.
+Windows'ta simgeler için sistemdeki Segoe UI Symbol yazı tipi çalışma anında okunur; programla
+dağıtılmaz.

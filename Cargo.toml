@@ -5,6 +5,9 @@ members = ["crates/antan-core", "crates/antan-app"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Şadan Özden"]
+repository = "https://github.com/sozden/AntAn"
 
 [workspace.dependencies]
 num-complex = { version = "0.4", features = ["serde"] }

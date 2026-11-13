@@ -2,6 +2,9 @@
 name = "antan-core"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 description = "AntAn çekirdeği: tel anten geometrisi, moment yöntemi çözücüsü, uzak alan, eşleme ve mekanik hesaplar"
 
 [dependencies]
