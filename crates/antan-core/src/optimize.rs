@@ -51,8 +51,15 @@ pub fn evaluate(d: &YagiDesign, g: &Goals) -> Option<Score> {
     let (mut gmin, mut fbmin, mut swrmax) = (f64::INFINITY, f64::INFINITY, 0.0f64);
     for f in freqs {
         let sol = solve(&ant, f).ok()?;
-        let fwd = gain(&sol, PI / 2.0, 0.0);
-        let back = gain(&sol, PI / 2.0, PI);
+        // Serbest uzayda ufuk; zemin üzerinde ileri yöndeki en yüksek kazancın
+        // yükseliş açısı (kalkış açısı), 1°'lik taramayla.
+        let theta = if ant.ground.is_free() {
+            PI / 2.0
+        } else {
+            (1..90).map(|e| PI / 2.0 - (e as f64).to_radians()).max_by(|a, b| gain(&sol, *a, 0.0).partial_cmp(&gain(&sol, *b, 0.0)).unwrap()).unwrap()
+        };
+        let fwd = gain(&sol, theta, 0.0);
+        let back = gain(&sol, theta, PI);
         gmin = gmin.min(to_db(fwd));
         fbmin = fbmin.min(to_db(fwd) - to_db(back));
         swrmax = swrmax.max(swr(sol.impedance(), g.z0).min(50.0));

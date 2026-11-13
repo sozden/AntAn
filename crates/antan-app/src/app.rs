@@ -77,6 +77,15 @@ impl AntAnApp {
             Some("moxon") => Project::template(Kind::Moxon, 144.3e6),
             Some("quad") => Project::template(Kind::Quad2, 144.3e6),
             Some("gp") => Project::template(Kind::GroundPlane, 145.0e6),
+            Some("vertical") => Project::template(Kind::GroundVertical, 14.2e6),
+            Some("yagi_ground") => {
+                let mut p = Project::yagi(144.3e6, 5);
+                if let Model::Yagi(d) = &mut p.model {
+                    d.ground = antan_core::geometry::Ground::Real { permittivity: 13.0, conductivity: 0.005 };
+                    d.height = 2.0 * C0 / d.frequency;
+                }
+                p
+            }
             Some("yagi7") => tapered_demo(),
             _ => Project::yagi(144.3e6, 5),
         };
@@ -89,7 +98,7 @@ impl AntAnApp {
             path: None,
             undo: Vec::new(),
             redo: Vec::new(),
-            antenna: Antenna { name: String::new(), frequency: 1.0, wires: vec![], sources: vec![] },
+            antenna: Antenna::new("", 1.0, vec![], vec![]),
             wire_map: Vec::new(),
             solution: None,
             pattern: None,
@@ -443,6 +452,8 @@ impl AntAnApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let name = self.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "kaydedilmedi".into());
                 ui.label(RichText::new(name).small().color(theme::TEXT_DIM));
+                ui.separator();
+                ui.label(RichText::new(self.project.model.ground().label()).small().color(theme::TEXT_DIM));
             });
         });
     }
@@ -482,6 +493,17 @@ impl AntAnApp {
         let lambda = C0 / self.antenna.frequency;
         Self::kpi(ui, "Kazanç", format!("{:.2} dBi", s.max_gain_dbi), format!("{:.2} dBd · yönlülük {:.2} dBi", s.max_gain_dbi - 2.15, s.directivity_dbi), Color32::WHITE);
         Self::kpi(ui, "Ön / arka", format!("{:.1} dB", s.front_to_back_db), String::new(), theme::ACCENT);
+        let ground = self.antenna.ground;
+        if !ground.is_free() {
+            let (lo, hi) = self.antenna.bounds();
+            Self::kpi(
+                ui,
+                "Kalkış açısı",
+                format!("{:.0}°", 90.0 - s.max_theta.to_degrees()),
+                format!("{} · yükseklik {:.2}–{:.2} m", ground.label(), lo[2].max(0.0), hi[2]),
+                theme::WARM,
+            );
+        }
         Self::kpi(ui, "Besleme empedansı", fmt_z(z), format!("|Γ| = {:.3} · RL {:.1} dB", matching::reflection(z, self.project.z0).norm(), matching::return_loss_db(z, self.project.z0)), Color32::WHITE);
         Self::kpi(ui, &format!("SWR ({:.0} Ω)", self.project.z0), format!("{swr:.2}"), match self.band() {
             Some((lo, hi)) => format!("2:1 bant: {:.2}–{:.2} MHz ({:.0} kHz)", lo / 1e6, hi / 1e6, (hi - lo) / 1e3),
@@ -494,7 +516,14 @@ impl AntAnApp {
             ui,
             "Verim ve boyut",
             format!("{:.2} %", sol.efficiency() * 100.0),
-            format!("kayıp {:.3} dB · {:.0} × {:.0} mm ({:.2} λ)", -10.0 * sol.efficiency().max(1e-9).log10(), (hi[0] - lo[0]) * 1e3, (hi[1] - lo[1]) * 1e3, (hi[0] - lo[0]) / lambda),
+            format!(
+                "kayıp {:.3} dB · {:.0} × {:.0} × {:.0} mm (X·Y·Z), en büyük {:.2} λ",
+                -10.0 * sol.efficiency().max(1e-9).log10(),
+                (hi[0] - lo[0]) * 1e3,
+                (hi[1] - lo[1]) * 1e3,
+                (hi[2] - lo[2]) * 1e3,
+                (0..3).map(|i| hi[i] - lo[i]).fold(0.0, f64::max) / lambda
+            ),
             Color32::WHITE,
         );
     }

@@ -1,4 +1,4 @@
-//! İnce tel moment yöntemi (MoM) çözücüsü — serbest uzay.
+//! İnce tel moment yöntemi (MoM) çözücüsü — serbest uzay ya da zemin üzerinde.
 //!
 //! Formülasyon: Harrington'ın karışık potansiyelli (vektör + skaler potansiyel)
 //! darbe tabanlı / nokta eşlemeli yöntemi. Her tel M eşit parçaya bölünür;
@@ -18,14 +18,21 @@
 //! Tekil kısım (1/R) analitik, kalan düzgün kısım Gauss-Legendre ile alınır.
 //! Zaman bağımlılığı e^{jωt}; endüktif reaktans pozitiftir.
 //!
-//! Sınırlar: toprak yok (yalnız serbest uzay); birleşimde çapı farklı teller
-//! indirgenmiş çekirdekle yaklaşık modellenir.
+//! Zemin (z = 0): kusursuz iletken zeminin görüntü yöntemi. Her kaynak tabanın
+//! z'ye göre aynası, akımı ve yükü ters işaretli olarak eklenir (yatay akım
+//! ters, düşey akım aynı yönde görünür). Zemine değen tel uçlarında yalnız
+//! gerçek yarıdan oluşan bir "zemin tabanı" kurulur; eksik yarıyı görüntüsü
+//! tamamlar, böylece akım zemine akabilir ve uç beslenebilir (monopol).
+//! Gerçek zemin akımlar için kusursuz kabul edilir; farkı uzak alanda Fresnel
+//! katsayılarıyla girer (bkz. `farfield`).
+//!
+//! Sınırlar: birleşimde çapı farklı teller indirgenmiş çekirdekle yaklaşık modellenir.
 
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
-use crate::geometry::{Antenna, Vec3, add, dot, norm, scale, sub};
+use crate::geometry::{Antenna, Ground, Vec3, add, dot, norm, scale, sub};
 use crate::linalg::Lu;
 use crate::{C0, EPS0, MU0};
 
@@ -35,6 +42,7 @@ pub enum SolveError {
     NoSources,
     DegenerateWire(usize),
     BadSource(usize),
+    BelowGround(usize),
     Singular,
 }
 
@@ -45,6 +53,7 @@ impl std::fmt::Display for SolveError {
             Self::NoSources => write!(f, "Besleme kaynağı tanımlı değil"),
             Self::DegenerateWire(i) => write!(f, "{}. telin boyu ya da çapı geçersiz", i + 1),
             Self::BadSource(i) => write!(f, "{}. kaynak geçerli bir noktada değil (serbest uç ya da olmayan tel)", i + 1),
+            Self::BelowGround(i) => write!(f, "{}. tel zeminin (z = 0) altına iniyor; yüksekliği artırın", i + 1),
             Self::Singular => write!(f, "Empedans matrisi tekil; geometri çözülemedi"),
         }
     }
@@ -69,41 +78,56 @@ impl Seg {
     pub fn mid(&self) -> Vec3 {
         self.point(0.5 * self.len)
     }
+    /// z = 0 düzlemine göre ayna görüntüsü.
+    pub fn mirror(&self) -> Seg {
+        Seg { start: mirror(self.start), dir: mirror(self.dir), ..*self }
+    }
+}
+
+pub fn mirror(p: Vec3) -> Vec3 {
+    [p[0], p[1], -p[2]]
 }
 
 /// Bir tabanın bir tele dokunduğu yer: (tel, düğümün tel üzerindeki konumu 0..1,
-/// akım yönü işareti: +1 tel yönünde, −1 ters).
+/// akım yönü işareti: +1 tel yönünde, −1 ters). Tel sırası `usize::MAX` ise boştur.
 pub type Touch = (usize, f64, f64);
 
 /// Bir akım tabanı.
 #[derive(Clone, Copy, Debug)]
 pub struct Basis {
     pub pos: Vec3,
-    /// p'de biten parça (yönü p'ye doğru).
+    /// p'de biten parça (yönü p'ye doğru). Zemin tabanında kullanılmaz.
     pub minus: Seg,
     /// p'den başlayan parça (yönü p'den uzağa).
     pub plus: Seg,
     /// Eksi ve artı tarafın dokunduğu teller. Tel içi tabanlarda ikisi aynıdır.
     pub touch: [Touch; 2],
+    /// Tel ucunda (birleşim ya da zemin).
     pub junction: bool,
+    /// Zemine bağlı yarım taban (yalnız artı yarı gerçektir).
+    pub ground: bool,
 }
 
 impl Basis {
-    /// Akım taşıyan iki yarım parça: (orta nokta, yön × uzunluk).
-    pub fn halves(&self) -> [(Vec3, Vec3); 2] {
-        let hm = 0.5 * self.minus.len;
-        let hp = 0.5 * self.plus.len;
-        [
-            (sub(self.pos, scale(self.minus.dir, 0.5 * hm)), scale(self.minus.dir, hm)),
-            (add(self.pos, scale(self.plus.dir, 0.5 * hp)), scale(self.plus.dir, hp)),
-        ]
+    fn half_plus(&self) -> Seg {
+        Seg { len: 0.5 * self.plus.len, ..self.plus }
     }
-    /// Toplam akım elemanı vektörü.
+    fn half_minus(&self) -> Seg {
+        let h = 0.5 * self.minus.len;
+        Seg { start: sub(self.pos, scale(self.minus.dir, h)), len: h, ..self.minus }
+    }
+    /// Akım taşıyan gerçek yarım parçalar.
+    pub fn current_halves(&self) -> Vec<Seg> {
+        if self.ground { vec![self.half_plus()] } else { vec![self.half_minus(), self.half_plus()] }
+    }
+    /// Test yolu vektörü (gerçek yarıların toplamı).
     pub fn dl(&self) -> Vec3 {
-        let [(_, a), (_, b)] = self.halves();
-        add(a, b)
+        self.current_halves().iter().fold([0.0; 3], |acc, s| add(acc, scale(s.dir, s.len)))
     }
 }
+
+/// Uzak alan için akım elemanı: (taban, orta nokta, yön × uzunluk).
+pub type CurrentElement = (usize, Vec3, Vec3);
 
 /// Bir besleme noktasındaki sonuç.
 #[derive(Clone, Debug)]
@@ -122,6 +146,8 @@ pub struct Solution {
     pub basis: Vec<Basis>,
     /// Her tabanın akımı (A, tepe değer).
     pub currents: Vec<Complex64>,
+    /// Gerçek akım elemanları (görüntüler hariç).
+    pub elements: Vec<CurrentElement>,
     pub feeds: Vec<Feed>,
     /// Kaynaklardan giren toplam güç (W).
     pub input_power: f64,
@@ -129,6 +155,7 @@ pub struct Solution {
     pub loss_power: f64,
     /// Tel sayısı.
     pub wire_count: usize,
+    pub ground: Ground,
 }
 
 impl Solution {
@@ -141,7 +168,7 @@ impl Solution {
         if self.input_power > 0.0 { (1.0 - self.loss_power / self.input_power).clamp(0.0, 1.0) } else { 0.0 }
     }
     /// Bir tel boyunca akım dağılımı: (konum 0..1, akım; tel yönünde pozitif).
-    /// Serbest uçlarda sıfır, birleşimlerde birleşim akımı.
+    /// Serbest uçlarda sıfır, birleşim/zemin uçlarında oradaki akım.
     pub fn wire_currents(&self, wire: usize) -> Vec<(f64, Complex64)> {
         let zero = Complex64::new(0.0, 0.0);
         let (mut i0, mut i1) = (zero, zero);
@@ -221,11 +248,15 @@ fn junction_tolerance(antenna: &Antenna, lambda: f64) -> f64 {
     (1e-3 * shortest).max(1e-9)
 }
 
+const NONE_TOUCH: Touch = (usize::MAX, 0.0, 0.0);
+
 pub fn mesh(antenna: &Antenna) -> Result<Mesh, SolveError> {
     if antenna.wires.is_empty() {
         return Err(SolveError::NoWires);
     }
     let lambda = C0 / antenna.frequency;
+    let tol = junction_tolerance(antenna, lambda);
+    let grounded = !antenna.ground.is_free();
     let mut basis = Vec::new();
     let mut wire_first = Vec::new();
     // Uç parçaları: (tel, uç: 0 başlangıç / 1 bitiş, uç noktası, telin yönü, parça boyu, yarıçap)
@@ -235,6 +266,9 @@ pub fn mesh(antenna: &Antenna) -> Result<Mesh, SolveError> {
         if !(len > 0.0) || !(w.diameter > 0.0) || !len.is_finite() {
             return Err(SolveError::DegenerateWire(wi));
         }
+        if grounded && (w.start[2] < -tol || w.end[2] < -tol) {
+            return Err(SolveError::BelowGround(wi));
+        }
         let m = w.segment_count(lambda);
         let u = w.direction();
         let delta = len / m as f64;
@@ -243,14 +277,26 @@ pub fn mesh(antenna: &Antenna) -> Result<Mesh, SolveError> {
         let seg = |k: usize| Seg { start: add(w.start, scale(u, delta * k as f64)), dir: u, len: delta, radius: a, wire: wi };
         for i in 1..m {
             let t = i as f64 / m as f64;
-            basis.push(Basis { pos: add(w.start, scale(u, len * t)), minus: seg(i - 1), plus: seg(i), touch: [(wi, t, 1.0), (wi, t, 1.0)], junction: false });
+            basis.push(Basis {
+                pos: add(w.start, scale(u, len * t)),
+                minus: seg(i - 1),
+                plus: seg(i),
+                touch: [(wi, t, 1.0), (wi, t, 1.0)],
+                junction: false,
+                ground: false,
+            });
         }
         ends.push((wi, 0, w.start, u, delta, a));
         ends.push((wi, 1, w.end, u, delta, a));
     }
 
+    // Bir ucu düğümden dışa doğru yönelmiş parça ve dokunma bilgisi.
+    let outward = |e: &(usize, u8, Vec3, Vec3, f64, f64), node: Vec3| -> (Seg, Touch) {
+        let (w, end, _, u, d, a) = *e;
+        if end == 0 { (Seg { start: node, dir: u, len: d, radius: a, wire: w }, (w, 0.0, 1.0)) } else { (Seg { start: node, dir: scale(u, -1.0), len: d, radius: a, wire: w }, (w, 1.0, -1.0)) }
+    };
+
     // Birleşimler: çakışan uçları grupla.
-    let tol = junction_tolerance(antenna, lambda);
     let mut used = vec![false; ends.len()];
     for i in 0..ends.len() {
         if used[i] {
@@ -262,28 +308,26 @@ pub fn mesh(antenna: &Antenna) -> Result<Mesh, SolveError> {
                 group.push(j);
             }
         }
-        if group.len() < 2 {
+        let node = ends[i].2;
+        let on_ground = grounded && node[2].abs() < tol;
+        if group.len() < 2 && !on_ground {
             continue;
         }
         for &g in &group {
             used[g] = true;
         }
-        let node = ends[i].2;
+        let node = if on_ground { [node[0], node[1], 0.0] } else { node };
         // Referans uç: eksi taraf (düğüme doğru akan).
-        let (w0, e0, _, u0, d0, a0) = ends[i];
-        let (minus, touch0) = if e0 == 1 {
-            (Seg { start: sub(node, scale(u0, d0)), dir: u0, len: d0, radius: a0, wire: w0 }, (w0, 1.0, 1.0))
-        } else {
-            (Seg { start: add(node, scale(u0, d0)), dir: scale(u0, -1.0), len: d0, radius: a0, wire: w0 }, (w0, 0.0, -1.0))
-        };
+        let (out0, t_out) = outward(&ends[i], node);
+        let minus = Seg { start: out0.point(out0.len), dir: scale(out0.dir, -1.0), ..out0 };
+        let touch0 = (t_out.0, t_out.1, -t_out.2);
         for &g in &group[1..] {
-            let (w, e, _, u, d, a) = ends[g];
-            let (plus, touch1) = if e == 0 {
-                (Seg { start: node, dir: u, len: d, radius: a, wire: w }, (w, 0.0, 1.0))
-            } else {
-                (Seg { start: node, dir: scale(u, -1.0), len: d, radius: a, wire: w }, (w, 1.0, -1.0))
-            };
-            basis.push(Basis { pos: node, minus, plus, touch: [touch0, touch1], junction: true });
+            let (plus, touch1) = outward(&ends[g], node);
+            basis.push(Basis { pos: node, minus, plus, touch: [touch0, touch1], junction: true, ground: false });
+        }
+        if on_ground {
+            // Referans telden zemine akım: yalnız gerçek artı yarı.
+            basis.push(Basis { pos: node, minus: out0, plus: out0, touch: [t_out, NONE_TOUCH], junction: true, ground: true });
         }
     }
     Ok(Mesh { basis, wire_first })
@@ -299,7 +343,7 @@ fn source_bases(antenna: &Antenna, mesh: &Mesh, si: usize) -> Result<(Vec<(usize
         let idx = first + node - 1;
         return Ok((vec![(idx, 1.0)], mesh.basis[idx].pos));
     }
-    // Tel ucunda: o uca dokunan birleşim tabanlarının hepsi.
+    // Tel ucunda: o uca dokunan birleşim/zemin tabanlarının hepsi.
     let t_end = if node == 0 { 0.0 } else { 1.0 };
     let mut out = Vec::new();
     for (i, b) in mesh.basis.iter().enumerate().filter(|(_, b)| b.junction) {
@@ -315,6 +359,27 @@ fn source_bases(antenna: &Antenna, mesh: &Mesh, si: usize) -> Result<(Vec<(usize
     Ok((out, if node == 0 { w.start } else { w.end }))
 }
 
+/// Kaynak tarafı: akım yarıları ve yük parçaları (işaretli).
+struct Source {
+    halves: Vec<(Seg, f64)>,
+    charges: Vec<(Seg, f64)>,
+}
+
+impl Source {
+    fn of(b: &Basis) -> Self {
+        if b.ground {
+            Self { halves: vec![(b.half_plus(), 1.0)], charges: vec![(b.plus, 1.0)] }
+        } else {
+            Self { halves: vec![(b.half_minus(), 1.0), (b.half_plus(), 1.0)], charges: vec![(b.plus, 1.0), (b.minus, -1.0)] }
+        }
+    }
+    /// Kusursuz zemin görüntüsü: aynalanmış geometri, ters işaretli akım ve yük.
+    fn image(&self) -> Self {
+        let m = |v: &Vec<(Seg, f64)>| v.iter().map(|(s, w)| (s.mirror(), -w)).collect();
+        Self { halves: m(&self.halves), charges: m(&self.charges) }
+    }
+}
+
 /// Anteni `frequency` (Hz) frekansında çözer. Parçalama her zaman anten
 /// tasarım frekansına göre yapılır; böylece frekans taraması pürüzsüz olur.
 pub fn solve(antenna: &Antenna, frequency: f64) -> Result<Solution, SolveError> {
@@ -327,44 +392,47 @@ pub fn solve(antenna: &Antenna, frequency: f64) -> Result<Solution, SolveError> 
     if n == 0 {
         return Err(SolveError::Singular);
     }
+    let grounded = !antenna.ground.is_free();
     let omega = 2.0 * PI * frequency;
     let k = omega / C0;
     let j = Complex64::new(0.0, 1.0);
     let c_a = j * omega * MU0;
     let c_phi = 1.0 / (j * omega * EPS0);
 
-    // Kaynak tarafı yarım parçaları (akım elemanları).
-    let halves: Vec<[Seg; 2]> = basis
-        .iter()
-        .map(|b| {
-            let hm = 0.5 * b.minus.len;
-            let hp = 0.5 * b.plus.len;
-            [
-                Seg { start: sub(b.pos, scale(b.minus.dir, hm)), dir: b.minus.dir, len: hm, radius: b.minus.radius, wire: b.minus.wire },
-                Seg { start: b.pos, dir: b.plus.dir, len: hp, radius: b.plus.radius, wire: b.plus.wire },
-            ]
-        })
-        .collect();
+    let mut sources: Vec<Source> = basis.iter().map(Source::of).collect();
+    if grounded {
+        // Görüntüleri aynı listeye ekle: gerçek + görüntü katkısı birlikte toplanır.
+        for s in &mut sources {
+            let img = s.image();
+            s.halves.extend(img.halves);
+            s.charges.extend(img.charges);
+        }
+    }
 
     let mut z = vec![Complex64::new(0.0, 0.0); n * n];
     for m in 0..n {
         let bm = &basis[m];
         let pm = bm.pos;
         let dl_m = bm.dl();
-        let m_plus = bm.plus.mid();
-        let m_minus = bm.minus.mid();
-        for s in 0..n {
-            let bs = &basis[s];
-            let [h0, h1] = &halves[s];
-            let vec_pot = psi_seg(h0, pm, k) * (h0.len * dot(h0.dir, dl_m)) + psi_seg(h1, pm, k) * (h1.len * dot(h1.dir, dl_m));
-            let scalar = psi_seg(&bs.plus, m_plus, k) - psi_seg(&bs.minus, m_plus, k) - psi_seg(&bs.plus, m_minus, k) + psi_seg(&bs.minus, m_minus, k);
+        let t_plus = bm.plus.mid();
+        let t_minus = if bm.ground { bm.pos } else { bm.minus.mid() };
+        for (s, src) in sources.iter().enumerate() {
+            let mut vec_pot = Complex64::new(0.0, 0.0);
+            for (h, w) in &src.halves {
+                vec_pot += psi_seg(h, pm, k) * (w * h.len * dot(h.dir, dl_m));
+            }
+            let mut scalar = Complex64::new(0.0, 0.0);
+            for (c, w) in &src.charges {
+                scalar += (psi_seg(c, t_plus, k) - psi_seg(c, t_minus, k)) * *w;
+            }
             z[m * n + s] = c_a * vec_pot + c_phi * scalar;
         }
     }
-    // İletken kaybı: her tabana seri dağıtılmış iç empedans.
+    // İletken kaybı: her tabana seri dağıtılmış iç empedans (yalnız gerçek yarılar).
     let mut z_int = Vec::with_capacity(n);
-    for (i, h) in halves.iter().enumerate() {
-        let zi: Complex64 = h
+    for (i, b) in basis.iter().enumerate() {
+        let zi: Complex64 = b
+            .current_halves()
             .iter()
             .map(|s| {
                 let w = &antenna.wires[s.wire];
@@ -401,8 +469,9 @@ pub fn solve(antenna: &Antenna, frequency: f64) -> Result<Solution, SolveError> 
         .collect();
     let input_power = feeds.iter().map(|f| 0.5 * (f.voltage * f.current.conj()).re).sum();
     let loss_power = currents.iter().zip(&z_int).map(|(i, zi)| 0.5 * i.norm_sqr() * zi.re).sum();
+    let elements = basis.iter().enumerate().flat_map(|(i, b)| b.current_halves().into_iter().map(move |s| (i, s.mid(), scale(s.dir, s.len)))).collect();
 
-    Ok(Solution { frequency, basis: mesh.basis, currents, feeds, input_power, loss_power, wire_count: antenna.wires.len() })
+    Ok(Solution { frequency, basis: mesh.basis, currents, elements, feeds, input_power, loss_power, wire_count: antenna.wires.len(), ground: antenna.ground })
 }
 
 /// `start`..`stop` (Hz) arasında `points` noktada giriş empedansını hesaplar.

@@ -21,7 +21,8 @@ dahil), 3B ışıma diyagramı, Smith abağı, eşleme hesapları ve otomatik iy
 - **Tel modeli:** her tel başlangıç/bitiş koordinatı (mm), çap, et kalınlığı, malzeme, parça sayısı.
   Teller uç uca değdiğinde otomatik **birleşim** oluşur (köşe, T, radyal yıldız).
 - Şablonlar: 2–11 elemanlı Yagi, kademeli Yagi örneği, yarım dalga dipol, ters V, katlanmış dipol,
-  2 elemanlı quad, delta loop, ground plane (eğik radyalli), Moxon dikdörtgeni.
+  2 elemanlı quad, delta loop, ground plane (eğik radyalli), Moxon dikdörtgeni, zemine bağlı
+  çeyrek dalga dikey.
 - Malzemeler: Al 6063-T6, Al 6061-T6, bakır, pirinç, paslanmaz 304, kayıpsız.
 
 **Analiz**
@@ -32,6 +33,19 @@ dahil), 3B ışıma diyagramı, Smith abağı, eşleme hesapları ve otomatik iy
 - Yatay ve düşey **kutupsal kesitler** (fareyle okuma), elemanlar boyunca **akım dağılımı**.
 - **Frekans taraması** (arka planda, tüm çekirdeklerde paralel): SWR, R/X grafikleri,
   **Smith abağı**, 2:1 bant genişliği, değer tablosu.
+
+**Zemin**
+- Serbest uzay, **kusursuz zemin** (görüntü yöntemi) ve **gerçek zemin** (εr, σ; deniz suyu,
+  ortalama toprak, kayalık vb. hazır değerler).
+- Zemine değen tel uçları zemine bağlanır ve tabandan beslenebilir (monopol, dikey antenler).
+- Gerçek zemin: akımlar kusursuz zeminle, uzak alan Fresnel yansıma katsayılarıyla hesaplanır
+  (MININEC/MMANA yaklaşımı) → gerçekçi düşük açı kazancı ve **kalkış açısı**. Toprak kaybı
+  besleme empedansına girmez.
+- Yagi için bum yüksekliği (m / λ); tel modelinde tüm geometriyi kaydırma, "zemine otur".
+- Zemin üzerinde azimut kesiti kalkış açısında alınır; ön/arka aynı yükseliş açısında ölçülür;
+  iyileştirici kazancı kalkış açısında değerlendirir.
+
+![Zemin üzerinde Yagi](docs/zemin-yagi-3b.png)
 
 **Eşleme**
 - L devresi (tüm çözümler, kontrol empedansıyla), hairpin (beta) boyu ve endüktansı,
@@ -96,6 +110,10 @@ tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Testlerle doğrulananlar:
 - Kayıpsız antenlerde enerji korunumu (kazanç = yönlülük, ±0.05 dB) — birleşimli antenler dahil
 - GP tabanında Kirchhoff akım yasası; birleşimden besleme = ortadan besleme
 - Üç parçaya bölünmüş dipol = tek parça dipol
+- Zemin: kusursuz zemin sonucu = serbest uzayda elle kurulmuş "anten + görüntü" çifti (yatay ve
+  dikey, 1e-6 içinde); λ/4 monopol = dipol/2 ve +3.01 dB; λ/2 yükseklikte yatay dipolün kalkış
+  açısı 30° (8.4 dBi); gerçek zeminde dikey polarizasyonun ufukta sönmesi; çok iletken gerçek
+  zeminin kusursuz zemine yakınsaması
 - Katlanmış dipol ≈ eşdeğer yarıçap modeli; Moxon, quad için ileri yönlülük ve yüksek Ö/A
 - İletken iç empedansının DC ve deri etkisi sınırları; L devresi/hairpin çözümlerinin geri kontrolü
 
@@ -104,11 +122,12 @@ ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
 
 Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
 bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
-`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp`, `ANTAN_AUTOSHOT_OPTIM=<adım>` ek seçeneklerdir.
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground`, `ANTAN_AUTOSHOT_OPTIM=<adım>` ek seçeneklerdir.
 
 ## Yol haritası
 
-- Toprak etkisi: önce kusursuz zemin (görüntü yöntemi), sonra gerçek zemin (yansıma katsayısı)
+- Gerçek zeminin akımlara etkisi (Sommerfeld/Norton) ve toprak kaybının empedansa yansıması
+- Gömülü radyal sistemi kaybı tahmini
 - Metal bum düzeltmesi (bumdan geçen / yalıtılmış elemanlar)
 - Yüklemeler (bobin/kondansatör/trap), çoklu kaynak ve faz besleme, yığınlama (stacking)
 - MMANA `.maa` ve NEC içe aktarma; PDF/HTML rapor

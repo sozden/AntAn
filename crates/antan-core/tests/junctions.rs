@@ -31,6 +31,7 @@ fn split_dipole_matches_single_wire() {
             Wire { segments: 10, ..wire("sağ", [0.0, 0.08, 0.0], [0.0, h, 0.0], &t) },
         ],
         sources: vec![templates::source(1, 0.5)],
+        ground: Default::default(),
     };
     let z2 = solver::solve(&split, f).unwrap().impedance();
     println!("tek parça {z1:.2}, bölünmüş {z2:.2}");

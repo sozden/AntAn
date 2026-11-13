@@ -81,6 +81,46 @@ pub struct Source {
     pub voltage: Complex64,
 }
 
+/// Zemin modeli. Zemin z = 0 düzlemidir; teller z ≥ 0'da olmalıdır.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum Ground {
+    /// Serbest uzay (zemin yok).
+    #[default]
+    FreeSpace,
+    /// Kusursuz iletken zemin (görüntü yöntemi).
+    Perfect,
+    /// Gerçek zemin: akımlar kusursuz zeminle, uzak alan Fresnel yansıma
+    /// katsayılarıyla hesaplanır (MININEC/MMANA yaklaşımı).
+    Real {
+        /// Bağıl dielektrik sabiti εr.
+        permittivity: f64,
+        /// İletkenlik σ (S/m).
+        conductivity: f64,
+    },
+}
+
+impl Ground {
+    pub fn is_free(&self) -> bool {
+        matches!(self, Ground::FreeSpace)
+    }
+    /// Gerçek zemin hazır değerleri (ad, εr, σ).
+    pub const PRESETS: [(&'static str, f64, f64); 6] = [
+        ("Deniz suyu", 81.0, 5.0),
+        ("Tatlı su", 80.0, 0.001),
+        ("Çok iyi toprak (verimli ova)", 20.0, 0.0303),
+        ("Ortalama toprak", 13.0, 0.005),
+        ("Zayıf toprak (kayalık, kumlu)", 5.0, 0.001),
+        ("Şehir / sanayi bölgesi", 5.0, 0.001),
+    ];
+    pub fn label(&self) -> String {
+        match self {
+            Ground::FreeSpace => "Serbest uzay".into(),
+            Ground::Perfect => "Kusursuz zemin".into(),
+            Ground::Real { permittivity, conductivity } => format!("Gerçek zemin (εr {permittivity:.0}, σ {conductivity} S/m)"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Antenna {
     pub name: String,
@@ -88,9 +128,14 @@ pub struct Antenna {
     pub frequency: f64,
     pub wires: Vec<Wire>,
     pub sources: Vec<Source>,
+    #[serde(default)]
+    pub ground: Ground,
 }
 
 impl Antenna {
+    pub fn new(name: impl Into<String>, frequency: f64, wires: Vec<Wire>, sources: Vec<Source>) -> Self {
+        Self { name: name.into(), frequency, wires, sources, ground: Ground::FreeSpace }
+    }
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("anten JSON'a çevrilemedi")
     }

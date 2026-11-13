@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::C0;
-use crate::geometry::Antenna;
+use crate::geometry::{Antenna, Ground};
 use crate::templates::{Tube, source, wire};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -66,6 +66,11 @@ pub struct YagiDesign {
     /// Sürülen elemanın sırası.
     pub driven: usize,
     pub profile: Profile,
+    /// Bumun zeminden yüksekliği (m); yalnız zemin varken anlamlıdır.
+    #[serde(default)]
+    pub height: f64,
+    #[serde(default)]
+    pub ground: Ground,
 }
 
 impl YagiDesign {
@@ -83,7 +88,7 @@ impl YagiDesign {
             let len = (0.445 - 0.006 * d as f64).max(0.40);
             elements.push(YagiElement { name: format!("Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
         }
-        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile }
+        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace }
     }
 
     pub fn boom_length(&self) -> f64 {
@@ -100,18 +105,19 @@ impl YagiDesign {
             let first = wires.len();
             let pieces = self.profile.pieces(0.5 * e.length.max(1e-4));
             let x = e.x;
+            let z = if self.ground.is_free() { 0.0 } else { self.height };
             let (_, c_out, c_tube) = pieces[0];
             if i == self.driven {
                 feed = wires.len();
             }
-            wires.push(wire(&e.name, [x, -c_out, 0.0], [x, c_out, 0.0], c_tube));
+            wires.push(wire(&e.name, [x, -c_out, z], [x, c_out, z], c_tube));
             for (k, &(a, b, t)) in pieces.iter().enumerate().skip(1) {
-                wires.push(wire(&format!("{} ·{} sağ", e.name, k + 1), [x, a, 0.0], [x, b, 0.0], t));
-                wires.push(wire(&format!("{} ·{} sol", e.name, k + 1), [x, -a, 0.0], [x, -b, 0.0], t));
+                wires.push(wire(&format!("{} ·{} sağ", e.name, k + 1), [x, a, z], [x, b, z], t));
+                wires.push(wire(&format!("{} ·{} sol", e.name, k + 1), [x, -a, z], [x, -b, z], t));
             }
             map.push(first..wires.len());
         }
-        (Antenna { name: self.name.clone(), frequency: self.frequency, wires, sources: vec![source(feed, 0.5)] }, map)
+        (Antenna { name: self.name.clone(), frequency: self.frequency, wires, sources: vec![source(feed, 0.5)], ground: self.ground }, map)
     }
 
     pub fn build(&self) -> Antenna {

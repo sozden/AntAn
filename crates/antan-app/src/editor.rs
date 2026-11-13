@@ -206,6 +206,8 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
         });
     });
 
+    ground_section(app, ui);
+
     let selected = app.selected;
     match &mut app.project.model {
         Model::Yagi(d) => yagi_editor(ui, d, selected),
@@ -216,6 +218,98 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
 
     section(ui, "Notlar", false, |ui| {
         ui.add(egui::TextEdit::multiline(&mut app.project.notes).desired_rows(4).desired_width(f32::INFINITY));
+    });
+}
+
+fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
+    use antan_core::geometry::Ground;
+    let lambda = C0 / app.project.model.frequency();
+    section(ui, "Zemin ve yükseklik", true, |ui| {
+        let g = app.project.model.ground_mut();
+        let kind = match g {
+            Ground::FreeSpace => 0,
+            Ground::Perfect => 1,
+            Ground::Real { .. } => 2,
+        };
+        let mut k = kind;
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut k, 0, "Serbest uzay");
+            ui.selectable_value(&mut k, 1, "Kusursuz zemin");
+            ui.selectable_value(&mut k, 2, "Gerçek zemin");
+        });
+        if k != kind {
+            *g = match k {
+                0 => Ground::FreeSpace,
+                1 => Ground::Perfect,
+                _ => Ground::Real { permittivity: 13.0, conductivity: 0.005 },
+            };
+        }
+        if let Ground::Real { permittivity, conductivity } = g {
+            egui::Grid::new("real_ground").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                ui.label("Hazır");
+                let current = Ground::PRESETS.iter().find(|p| (p.1 - *permittivity).abs() < 1e-9 && (p.2 - *conductivity).abs() < 1e-12).map(|p| p.0).unwrap_or("Özel");
+                egui::ComboBox::from_id_salt("ground_preset").selected_text(current).width(200.0).show_ui(ui, |ui| {
+                    for (name, e, s) in Ground::PRESETS {
+                        if ui.selectable_label(current == name, format!("{name}  (εr {e}, σ {s})")).clicked() {
+                            *permittivity = e;
+                            *conductivity = s;
+                        }
+                    }
+                });
+                ui.end_row();
+                ui.label("Dielektrik sabiti εr");
+                ui.add(egui::DragValue::new(permittivity).range(1.0..=100.0).speed(0.1));
+                ui.end_row();
+                ui.label("İletkenlik σ");
+                ui.add(egui::DragValue::new(conductivity).range(0.0..=10.0).speed(0.0005).max_decimals(4).suffix(" S/m"));
+                ui.end_row();
+            });
+        }
+        let grounded = !g.is_free();
+        match &mut app.project.model {
+            Model::Yagi(d) => {
+                ui.add_enabled_ui(grounded, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Bum yüksekliği");
+                        let mut h = d.height;
+                        if ui.add(egui::DragValue::new(&mut h).range(0.05..=500.0).speed(0.05).max_decimals(2).suffix(" m")).changed() {
+                            d.height = h;
+                        }
+                        ui.label(RichText::new(format!("{:.2} λ", d.height / lambda)).color(theme::TEXT_DIM));
+                    });
+                });
+            }
+            Model::Wires(a) => {
+                let (lo, hi) = a.bounds();
+                ui.horizontal(|ui| {
+                    ui.label(format!("Yükseklik aralığı: {:.0} … {:.0} mm", lo[2] * MM, hi[2] * MM));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Tümünü kaydır (z)");
+                    for (l, dz) in [("−λ/4", -0.25), ("−1 m", -1.0 / lambda), ("+1 m", 1.0 / lambda), ("+λ/4", 0.25)] {
+                        if ui.small_button(l).clicked() {
+                            for w in &mut a.wires {
+                                w.start[2] += dz * lambda;
+                                w.end[2] += dz * lambda;
+                            }
+                        }
+                    }
+                    if ui.small_button("zemine otur").on_hover_text("En alt nokta z = 0 olacak şekilde kaydırır").clicked() {
+                        for w in &mut a.wires {
+                            w.start[2] -= lo[2];
+                            w.end[2] -= lo[2];
+                        }
+                    }
+                });
+            }
+        }
+        if grounded {
+            ui.label(
+                RichText::new("Zemin z = 0 düzlemidir. Akımlar kusursuz zemin görüntüsüyle bulunur; gerçek zeminde uzak alan Fresnel katsayılarıyla hesaplanır (MININEC/MMANA yaklaşımı). Toprak kaybı besleme empedansına girmez.")
+                    .small()
+                    .color(theme::TEXT_DIM),
+            );
+        }
     });
 }
 

@@ -42,10 +42,25 @@ impl Model {
             Model::Wires(a) => a.frequency = f,
         }
     }
+    pub fn ground(&self) -> antan_core::geometry::Ground {
+        match self {
+            Model::Yagi(d) => d.ground,
+            Model::Wires(a) => a.ground,
+        }
+    }
+    pub fn ground_mut(&mut self) -> &mut antan_core::geometry::Ground {
+        match self {
+            Model::Yagi(d) => &mut d.ground,
+            Model::Wires(a) => &mut a.ground,
+        }
+    }
     /// Geometriyi `k` ile ölçekler (boru çapları değişmez).
     pub fn scale(&mut self, k: f64) {
         match self {
-            Model::Yagi(d) => d.scale(k),
+            Model::Yagi(d) => {
+                d.scale(k);
+                d.height *= k;
+            }
             Model::Wires(a) => {
                 for w in &mut a.wires {
                     for i in 0..3 {

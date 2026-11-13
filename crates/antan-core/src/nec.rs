@@ -39,7 +39,20 @@ pub fn export(antenna: &Antenna, sweep: Option<(f64, f64, usize)>) -> String {
             w.radius()
         );
     }
-    let _ = writeln!(out, "GE 0");
+    match antenna.ground {
+        crate::geometry::Ground::FreeSpace => {
+            let _ = writeln!(out, "GE 0");
+        }
+        crate::geometry::Ground::Perfect => {
+            let _ = writeln!(out, "GE 1");
+            let _ = writeln!(out, "GN 1");
+        }
+        crate::geometry::Ground::Real { permittivity, conductivity } => {
+            // GN 0: yansıma katsayısı yaklaşımı (AntAn'ın uzak alan modeline en yakın).
+            let _ = writeln!(out, "GE 1");
+            let _ = writeln!(out, "GN 0 0 0 0 {permittivity:.3} {conductivity:.6}");
+        }
+    }
     for (i, w) in antenna.wires.iter().enumerate() {
         if w.material.conductivity.is_finite() {
             let _ = writeln!(out, "LD 5 {} 0 0 {:.4e}", i + 1, w.material.conductivity);
@@ -75,5 +88,14 @@ mod tests {
         assert_eq!(s.lines().filter(|l| l.starts_with("GW")).count(), 3);
         assert!(s.contains("EX 0 2 "));
         assert!(s.trim_end().ends_with("EN"));
+        assert!(s.contains("GE 0"));
+    }
+
+    #[test]
+    fn exports_ground_cards() {
+        let mut a = templates::dipole(14.2e6, 0.5, &Tube::aluminum(0.01, None));
+        a.ground = crate::geometry::Ground::Real { permittivity: 13.0, conductivity: 0.005 };
+        let s = export(&a, None);
+        assert!(s.contains("GE 1") && s.contains("GN 0 0 0 0 13.000 0.005000"));
     }
 }

@@ -45,10 +45,11 @@ pub enum Kind {
     DeltaLoop,
     GroundPlane,
     Moxon,
+    GroundVertical,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 7] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon];
+    pub const ALL: [Kind; 8] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon, Kind::GroundVertical];
     pub fn label(self) -> &'static str {
         match self {
             Kind::Dipole => "Yarım dalga dipol",
@@ -58,6 +59,7 @@ impl Kind {
             Kind::DeltaLoop => "Delta loop",
             Kind::GroundPlane => "Ground plane (GP)",
             Kind::Moxon => "Moxon dikdörtgeni",
+            Kind::GroundVertical => "Çeyrek dalga dikey (zemine bağlı)",
         }
     }
     pub fn build(self, frequency: f64, tube: &Tube) -> Antenna {
@@ -69,6 +71,7 @@ impl Kind {
             Kind::DeltaLoop => delta_loop(frequency, tube),
             Kind::GroundPlane => ground_plane(frequency, 45.0, tube),
             Kind::Moxon => moxon(frequency, tube),
+            Kind::GroundVertical => ground_vertical(frequency, tube),
         }
     }
 }
@@ -81,7 +84,7 @@ pub fn yagi(frequency: f64, elements: usize, tube: &Tube) -> Antenna {
 /// Ortadan beslemeli dipol; `length_wl` dalga boyu cinsinden boy.
 pub fn dipole(frequency: f64, length_wl: f64, tube: &Tube) -> Antenna {
     let lambda = C0 / frequency;
-    Antenna { name: "Dipol".into(), frequency, wires: vec![element("Dipol", 0.0, length_wl * lambda, tube)], sources: vec![source(0, 0.5)] }
+    Antenna::new("Dipol", frequency, vec![element("Dipol", 0.0, length_wl * lambda, tube)], vec![source(0, 0.5)])
 }
 
 /// Tepeden beslemeli ters V; `included_deg` iki kol arasındaki açı.
@@ -95,6 +98,7 @@ pub fn inverted_v(frequency: f64, included_deg: f64, tube: &Tube) -> Antenna {
         frequency,
         wires: vec![wire("Sol kol", [0.0; 3], tip(-1.0), tube), wire("Sağ kol", [0.0; 3], tip(1.0), tube)],
         sources: vec![source(0, 0.0)],
+        ground: Default::default(),
     }
 }
 
@@ -113,6 +117,7 @@ pub fn folded_dipole(frequency: f64, spacing_wl: f64, tube: &Tube) -> Antenna {
             wire("Sol uç", p(-1.0, 1.0), p(-1.0, 0.0), tube),
         ],
         sources: vec![source(0, 0.5)],
+        ground: Default::default(),
     }
 }
 
@@ -139,7 +144,7 @@ pub fn quad(frequency: f64, elements: usize, tube: &Tube) -> Antenna {
     for d in 0..n - 2 {
         wires.extend(square_loop(&format!("Yönlendirici {}", d + 1), (0.14 + 0.18 * (d + 1) as f64) * lambda, 0.97 * lambda, tube));
     }
-    Antenna { name: format!("{n} elemanlı quad"), frequency, wires, sources: vec![source(4, 0.5)] }
+    Antenna::new(format!("{n} elemanlı quad"), frequency, wires, vec![source(4, 0.5)])
 }
 
 /// Tepesi yukarıda eşkenar üçgen halka, alt kenar ortasından besleme (yatay
@@ -154,6 +159,7 @@ pub fn delta_loop(frequency: f64, tube: &Tube) -> Antenna {
         frequency,
         wires: vec![wire("Alt", a, b, tube), wire("Sağ", b, c, tube), wire("Sol", c, a, tube)],
         sources: vec![source(0, 0.5)],
+        ground: Default::default(),
     }
 }
 
@@ -168,7 +174,7 @@ pub fn ground_plane(frequency: f64, droop_deg: f64, tube: &Tube) -> Antenna {
     for (i, (cx, cy)) in [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)].into_iter().enumerate() {
         wires.push(wire(&format!("Radyal {}", i + 1), [0.0; 3], [cx * r * d.cos(), cy * r * d.cos(), -r * d.sin()], tube));
     }
-    Antenna { name: "Ground plane".into(), frequency, wires, sources: vec![source(0, 0.0)] }
+    Antenna::new("Ground plane", frequency, wires, vec![source(0, 0.0)])
 }
 
 /// Moxon dikdörtgeni boyutları (dalga boyu cinsinden), L. B. Cebik'in
@@ -201,5 +207,15 @@ pub fn moxon(frequency: f64, tube: &Tube) -> Antenna {
             wire("Sürülen kuyruk sol", p(e, -0.5 * a), p(e - b, -0.5 * a), tube),
         ],
         sources: vec![source(3, 0.5)],
+        ground: Default::default(),
     }
+}
+
+/// Zemine bağlı, tabandan beslenen çeyrek dalga dikey; ortalama toprak üzerinde.
+/// Akımlar kusursuz zeminle hesaplandığından toprak kaybı empedansa girmez.
+pub fn ground_vertical(frequency: f64, tube: &Tube) -> Antenna {
+    let lambda = C0 / frequency;
+    let mut a = Antenna::new("Dikey (zemine bağlı)", frequency, vec![wire("Dikey", [0.0; 3], [0.0, 0.0, 0.243 * lambda], tube)], vec![source(0, 0.0)]);
+    a.ground = crate::geometry::Ground::Real { permittivity: 13.0, conductivity: 0.005 };
+    a
 }

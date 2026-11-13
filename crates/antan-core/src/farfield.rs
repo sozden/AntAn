@@ -28,17 +28,53 @@ pub fn direction(theta: f64, phi: f64) -> Vec3 {
     [theta.sin() * phi.cos(), theta.sin() * phi.sin(), theta.cos()]
 }
 
+/// Fresnel yansıma katsayıları (dikey, yatay) — `elevation` zemine göre açı (rad).
+/// Kusursuz iletkende Rv → +1, Rh → −1.
+pub fn fresnel(elevation: f64, permittivity: f64, conductivity: f64, frequency: f64) -> (Complex64, Complex64) {
+    let eps_c = Complex64::new(permittivity, -conductivity / (2.0 * PI * frequency * crate::EPS0));
+    let s = elevation.sin();
+    let root = (eps_c - elevation.cos().powi(2)).sqrt();
+    let rv = (eps_c * s - root) / (eps_c * s + root);
+    let rh = (s - root) / (s + root);
+    (rv, rh)
+}
+
 pub fn field(sol: &Solution, theta: f64, phi: f64) -> FarField {
-    let k = 2.0 * PI * sol.frequency / C0;
+    let zero = Complex64::new(0.0, 0.0);
+    let grounded = !sol.ground.is_free();
     let r = direction(theta, phi);
+    // Zeminin altına ışıma yok.
+    if grounded && r[2] < -1e-12 {
+        return FarField { e_theta: zero, e_phi: zero };
+    }
+    let k = 2.0 * PI * sol.frequency / C0;
     let th = [theta.cos() * phi.cos(), theta.cos() * phi.sin(), -theta.sin()];
     let ph = [-phi.sin(), phi.cos(), 0.0];
-    let (mut st, mut sp) = (Complex64::new(0.0, 0.0), Complex64::new(0.0, 0.0));
-    for (b, i) in sol.basis.iter().zip(&sol.currents) {
-        for (mid, dl) in b.halves() {
-            let w = i * Complex64::from_polar(1.0, k * dot(r, mid));
-            st += w * dot(dl, th);
-            sp += w * dot(dl, ph);
+    let (mut st, mut sp, mut it, mut ip) = (zero, zero, zero, zero);
+    for &(b, mid, dl) in &sol.elements {
+        let i = sol.currents[b];
+        let w = i * Complex64::from_polar(1.0, k * dot(r, mid));
+        st += w * dot(dl, th);
+        sp += w * dot(dl, ph);
+        if grounded {
+            // Kusursuz zemin görüntüsü: aynalanmış konum, akım (−Ix, −Iy, +Iz).
+            let m = crate::solver::mirror(mid);
+            let dli = [-dl[0], -dl[1], dl[2]];
+            let w = i * Complex64::from_polar(1.0, k * dot(r, m));
+            it += w * dot(dli, th);
+            ip += w * dot(dli, ph);
+        }
+    }
+    match sol.ground {
+        crate::geometry::Ground::Real { permittivity, conductivity } => {
+            // Görüntü kusursuz zemin için kurulduğundan oranlar: Rv/(+1), Rh/(−1).
+            let (rv, rh) = fresnel(PI / 2.0 - theta, permittivity, conductivity, sol.frequency);
+            st += rv * it;
+            sp += -rh * ip;
+        }
+        _ => {
+            st += it;
+            sp += ip;
         }
     }
     let c = Complex64::new(0.0, -2.0 * PI * sol.frequency * MU0 / (4.0 * PI));
@@ -117,7 +153,9 @@ impl Pattern {
         }
         let max_theta = self.theta(bi / self.n_phi);
         let max_phi = self.phi(bi % self.n_phi);
-        let back = gain(sol, PI - max_theta, max_phi + PI);
+        // Arka yön: serbest uzayda tam ters yön; zemin üzerinde aynı yükseliş
+        // açısında ters azimut (EZNEC tanımı).
+        let back = if sol.ground.is_free() { gain(sol, PI - max_theta, max_phi + PI) } else { gain(sol, max_theta, max_phi + PI) };
 
         // ∫ G dΩ / 4π = verim; yönlülük = G_max / verim.
         let dth = PI / (self.n_theta - 1) as f64;

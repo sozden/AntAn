@@ -113,6 +113,21 @@ pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_d
         }
     }
 
+    if !antenna.ground.is_free() {
+        // Yarı saydam zemin diski (z = 0).
+        let mut mesh = Mesh::default();
+        let col = Color32::from_rgba_unmultiplied(120, 92, 60, 90);
+        mesh.colored_vertex(to_screen(cam([0.0; 3], yaw, pitch)), col);
+        for i in 0..=72 {
+            let a = i as f64 / 72.0 * std::f64::consts::TAU;
+            mesh.colored_vertex(to_screen(cam([1.15 * a.cos(), 1.15 * a.sin(), 0.0], yaw, pitch)), col);
+            if i > 0 {
+                mesh.add_triangle(0, i as u32, i as u32 + 1);
+            }
+        }
+        painter.add(Shape::mesh(mesh));
+    }
+
     if let (true, Some(pat)) = (v.show_pattern, pattern) {
         draw_surface(&painter, pat, max_gain_dbi, v, &to_screen, v.show_antenna);
     }
@@ -218,8 +233,13 @@ fn draw_antenna(painter: &egui::Painter, ant: &Antenna, sol: Option<&Solution>, 
     if ant.wires.is_empty() {
         return;
     }
-    let (lo, hi) = ant.bounds();
-    let c = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, (lo[2] + hi[2]) * 0.5];
+    let (mut lo, hi) = ant.bounds();
+    let grounded = !ant.ground.is_free();
+    if grounded {
+        lo[2] = 0.0;
+    }
+    // Zemin varken z = 0 zemin diskinde kalır; anten gerçek yüksekliğinde çizilir.
+    let c = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, if grounded { 0.0 } else { (lo[2] + hi[2]) * 0.5 }];
     let ext = (0..3).map(|i| hi[i] - lo[i]).fold(0.0, f64::max).max(1e-6);
     let s = 0.9 / ext;
     let map = |p: [f64; 3]| to_screen(cam([(p[0] - c[0]) * s, (p[1] - c[1]) * s, (p[2] - c[2]) * s], v.yaw, v.pitch));
