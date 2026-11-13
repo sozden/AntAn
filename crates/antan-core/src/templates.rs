@@ -54,16 +54,16 @@ impl Kind {
     pub const ALL: [Kind; 10] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon, Kind::GroundVertical, Kind::TrapDipole, Kind::LoadedVertical];
     pub fn label(self) -> &'static str {
         match self {
-            Kind::Dipole => "Yarım dalga dipol",
-            Kind::InvertedV => "Ters V dipol",
-            Kind::FoldedDipole => "Katlanmış dipol",
-            Kind::Quad2 => "2 elemanlı quad",
+            Kind::Dipole => crate::i18n::t("Half-wave dipole", "Yarım dalga dipol"),
+            Kind::InvertedV => crate::i18n::t("Inverted V dipole", "Ters V dipol"),
+            Kind::FoldedDipole => crate::i18n::t("Folded dipole", "Katlanmış dipol"),
+            Kind::Quad2 => crate::i18n::t("2-element quad", "2 elemanlı quad"),
             Kind::DeltaLoop => "Delta loop",
             Kind::GroundPlane => "Ground plane (GP)",
-            Kind::Moxon => "Moxon dikdörtgeni",
-            Kind::GroundVertical => "Çeyrek dalga dikey (zemine bağlı)",
-            Kind::TrapDipole => "Tuzaklı dipol 40/80 m (W3DZZ tarzı)",
-            Kind::LoadedVertical => "Bobin yüklü kısa dikey (λ/8)",
+            Kind::Moxon => crate::i18n::t("Moxon rectangle", "Moxon dikdörtgeni"),
+            Kind::GroundVertical => crate::i18n::t("Quarter-wave vertical (ground-mounted)", "Çeyrek dalga dikey (zemine bağlı)"),
+            Kind::TrapDipole => crate::i18n::t("Trap dipole 40/80 m (W3DZZ style)", "Tuzaklı dipol 40/80 m (W3DZZ tarzı)"),
+            Kind::LoadedVertical => crate::i18n::t("Coil-loaded short vertical (λ/8)", "Bobin yüklü kısa dikey (λ/8)"),
         }
     }
     pub fn build(self, frequency: f64, tube: &Tube) -> Antenna {
@@ -90,7 +90,7 @@ pub fn yagi(frequency: f64, elements: usize, tube: &Tube) -> Antenna {
 /// Ortadan beslemeli dipol; `length_wl` dalga boyu cinsinden boy.
 pub fn dipole(frequency: f64, length_wl: f64, tube: &Tube) -> Antenna {
     let lambda = C0 / frequency;
-    Antenna::new("Dipol", frequency, vec![element("Dipol", 0.0, length_wl * lambda, tube)], vec![source(0, 0.5)])
+    Antenna::new(crate::i18n::t("Dipole", "Dipol"), frequency, vec![element("Dipol", 0.0, length_wl * lambda, tube)], vec![source(0, 0.5)])
 }
 
 /// Tepeden beslemeli ters V; `included_deg` iki kol arasındaki açı.
@@ -100,9 +100,9 @@ pub fn inverted_v(frequency: f64, included_deg: f64, tube: &Tube) -> Antenna {
     let h = (0.5 * included_deg).to_radians();
     let tip = |s: f64| [0.0, s * arm * h.sin(), -arm * h.cos()];
     Antenna {
-        name: "Ters V".into(),
+        name: crate::i18n::t("Inverted V", "Ters V").into(),
         frequency,
-        wires: vec![wire("Sol kol", [0.0; 3], tip(-1.0), tube), wire("Sağ kol", [0.0; 3], tip(1.0), tube)],
+        wires: vec![wire(crate::i18n::t("Left arm", "Sol kol"), [0.0; 3], tip(-1.0), tube), wire(crate::i18n::t("Right arm", "Sağ kol"), [0.0; 3], tip(1.0), tube)],
         sources: vec![source(0, 0.0)],
         ground: Default::default(),
         loads: Vec::new(),
@@ -115,13 +115,13 @@ pub fn folded_dipole(frequency: f64, spacing_wl: f64, tube: &Tube) -> Antenna {
     let (l, s) = (0.48 * lambda, spacing_wl * lambda);
     let p = |y: f64, z: f64| [0.0, y * 0.5 * l, z * s];
     Antenna {
-        name: "Katlanmış dipol".into(),
+        name: crate::i18n::t("Folded dipole", "Katlanmış dipol").into(),
         frequency,
         wires: vec![
-            wire("Alt (beslenen)", p(-1.0, 0.0), p(1.0, 0.0), tube),
-            wire("Sağ uç", p(1.0, 0.0), p(1.0, 1.0), tube),
-            wire("Üst", p(1.0, 1.0), p(-1.0, 1.0), tube),
-            wire("Sol uç", p(-1.0, 1.0), p(-1.0, 0.0), tube),
+            wire(crate::i18n::t("Bottom (fed)", "Alt (beslenen)"), p(-1.0, 0.0), p(1.0, 0.0), tube),
+            wire(crate::i18n::t("Right end", "Sağ uç"), p(1.0, 0.0), p(1.0, 1.0), tube),
+            wire(crate::i18n::t("Top", "Üst"), p(1.0, 1.0), p(-1.0, 1.0), tube),
+            wire(crate::i18n::t("Left end", "Sol uç"), p(-1.0, 1.0), p(-1.0, 0.0), tube),
         ],
         sources: vec![source(0, 0.5)],
         ground: Default::default(),
@@ -134,10 +134,10 @@ fn square_loop(prefix: &str, x: f64, perimeter: f64, tube: &Tube) -> Vec<Wire> {
     let h = perimeter / 8.0;
     let c = |y: f64, z: f64| [x, y * h, z * h];
     vec![
-        wire(&format!("{prefix} alt"), c(-1.0, -1.0), c(1.0, -1.0), tube),
-        wire(&format!("{prefix} sağ"), c(1.0, -1.0), c(1.0, 1.0), tube),
-        wire(&format!("{prefix} üst"), c(1.0, 1.0), c(-1.0, 1.0), tube),
-        wire(&format!("{prefix} sol"), c(-1.0, 1.0), c(-1.0, -1.0), tube),
+        wire(&crate::tf!("{prefix} bottom", "{prefix} alt"), c(-1.0, -1.0), c(1.0, -1.0), tube),
+        wire(&crate::tf!("{prefix} right", "{prefix} sağ"), c(1.0, -1.0), c(1.0, 1.0), tube),
+        wire(&crate::tf!("{prefix} top", "{prefix} üst"), c(1.0, 1.0), c(-1.0, 1.0), tube),
+        wire(&crate::tf!("{prefix} left", "{prefix} sol"), c(-1.0, 1.0), c(-1.0, -1.0), tube),
     ]
 }
 
@@ -147,12 +147,12 @@ fn square_loop(prefix: &str, x: f64, perimeter: f64, tube: &Tube) -> Vec<Wire> {
 pub fn quad(frequency: f64, elements: usize, tube: &Tube) -> Antenna {
     let lambda = C0 / frequency;
     let n = elements.max(2);
-    let mut wires = square_loop("Yansıtıcı", 0.0, 1.12 * lambda, tube);
-    wires.extend(square_loop("Sürülen", 0.14 * lambda, 1.02 * lambda, tube));
+    let mut wires = square_loop(crate::i18n::t("Reflector", "Yansıtıcı"), 0.0, 1.12 * lambda, tube);
+    wires.extend(square_loop(crate::i18n::t("Driven", "Sürülen"), 0.14 * lambda, 1.02 * lambda, tube));
     for d in 0..n - 2 {
-        wires.extend(square_loop(&format!("Yönlendirici {}", d + 1), (0.14 + 0.18 * (d + 1) as f64) * lambda, 0.97 * lambda, tube));
+        wires.extend(square_loop(&crate::tf!("Director {}", "Yönlendirici {}", d + 1), (0.14 + 0.18 * (d + 1) as f64) * lambda, 0.97 * lambda, tube));
     }
-    Antenna::new(format!("{n} elemanlı quad"), frequency, wires, vec![source(4, 0.5)])
+    Antenna::new(crate::tf!("{n}-element quad", "{n} elemanlı quad"), frequency, wires, vec![source(4, 0.5)])
 }
 
 /// Tepesi yukarıda eşkenar üçgen halka, alt kenar ortasından besleme (yatay
@@ -165,7 +165,7 @@ pub fn delta_loop(frequency: f64, tube: &Tube) -> Antenna {
     Antenna {
         name: "Delta loop".into(),
         frequency,
-        wires: vec![wire("Alt", a, b, tube), wire("Sağ", b, c, tube), wire("Sol", c, a, tube)],
+        wires: vec![wire(crate::i18n::t("Bottom", "Alt"), a, b, tube), wire(crate::i18n::t("Right", "Sağ"), b, c, tube), wire(crate::i18n::t("Left", "Sol"), c, a, tube)],
         sources: vec![source(0, 0.5)],
         ground: Default::default(),
         loads: Vec::new(),
@@ -179,9 +179,9 @@ pub fn ground_plane(frequency: f64, droop_deg: f64, tube: &Tube) -> Antenna {
     let v = 0.228 * lambda;
     let r = 0.25 * lambda;
     let d = droop_deg.to_radians();
-    let mut wires = vec![wire("Dikey", [0.0; 3], [0.0, 0.0, v], tube)];
+    let mut wires = vec![wire(crate::i18n::t("Vertical", "Dikey"), [0.0; 3], [0.0, 0.0, v], tube)];
     for (i, (cx, cy)) in [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)].into_iter().enumerate() {
-        wires.push(wire(&format!("Radyal {}", i + 1), [0.0; 3], [cx * r * d.cos(), cy * r * d.cos(), -r * d.sin()], tube));
+        wires.push(wire(&crate::tf!("Radial {}", "Radyal {}", i + 1), [0.0; 3], [cx * r * d.cos(), cy * r * d.cos(), -r * d.sin()], tube));
     }
     Antenna::new("Ground plane", frequency, wires, vec![source(0, 0.0)])
 }
@@ -208,12 +208,12 @@ pub fn moxon(frequency: f64, tube: &Tube) -> Antenna {
         name: "Moxon".into(),
         frequency,
         wires: vec![
-            wire("Yansıtıcı", p(0.0, -0.5 * a), p(0.0, 0.5 * a), tube),
-            wire("Yansıtıcı kuyruk sağ", p(0.0, 0.5 * a), p(d, 0.5 * a), tube),
-            wire("Yansıtıcı kuyruk sol", p(0.0, -0.5 * a), p(d, -0.5 * a), tube),
-            wire("Sürülen", p(e, -0.5 * a), p(e, 0.5 * a), tube),
-            wire("Sürülen kuyruk sağ", p(e, 0.5 * a), p(e - b, 0.5 * a), tube),
-            wire("Sürülen kuyruk sol", p(e, -0.5 * a), p(e - b, -0.5 * a), tube),
+            wire(crate::i18n::t("Reflector", "Yansıtıcı"), p(0.0, -0.5 * a), p(0.0, 0.5 * a), tube),
+            wire(crate::i18n::t("Reflector tail right", "Yansıtıcı kuyruk sağ"), p(0.0, 0.5 * a), p(d, 0.5 * a), tube),
+            wire(crate::i18n::t("Reflector tail left", "Yansıtıcı kuyruk sol"), p(0.0, -0.5 * a), p(d, -0.5 * a), tube),
+            wire(crate::i18n::t("Driven", "Sürülen"), p(e, -0.5 * a), p(e, 0.5 * a), tube),
+            wire(crate::i18n::t("Driven tail right", "Sürülen kuyruk sağ"), p(e, 0.5 * a), p(e - b, 0.5 * a), tube),
+            wire(crate::i18n::t("Driven tail left", "Sürülen kuyruk sol"), p(e, -0.5 * a), p(e - b, -0.5 * a), tube),
         ],
         sources: vec![source(3, 0.5)],
         ground: Default::default(),
@@ -225,7 +225,7 @@ pub fn moxon(frequency: f64, tube: &Tube) -> Antenna {
 /// Akımlar kusursuz zeminle hesaplandığından toprak kaybı empedansa girmez.
 pub fn ground_vertical(frequency: f64, tube: &Tube) -> Antenna {
     let lambda = C0 / frequency;
-    let mut a = Antenna::new("Dikey (zemine bağlı)", frequency, vec![wire("Dikey", [0.0; 3], [0.0, 0.0, 0.243 * lambda], tube)], vec![source(0, 0.0)]);
+    let mut a = Antenna::new(crate::i18n::t("Vertical (ground-mounted)", "Dikey (zemine bağlı)"), frequency, vec![wire(crate::i18n::t("Vertical", "Dikey"), [0.0; 3], [0.0, 0.0, 0.243 * lambda], tube)], vec![source(0, 0.0)]);
     a.ground = crate::geometry::Ground::Real { permittivity: 13.0, conductivity: 0.005 };
     a
 }

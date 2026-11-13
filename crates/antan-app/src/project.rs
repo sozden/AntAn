@@ -1,6 +1,9 @@
 //! Proje dosyası (.antan, JSON): model + analiz ayarları.
 
 use serde::{Deserialize, Serialize};
+use antan_core::i18n::t as tl;
+use antan_core::tf;
+
 use std::path::Path;
 
 use antan_core::Antenna;
@@ -73,8 +76,8 @@ impl Model {
     }
     pub fn kind_label(&self) -> &'static str {
         match self {
-            Model::Yagi(_) => "Yagi tasarımı",
-            Model::Wires(_) => "Tel modeli",
+            Model::Yagi(_) => tl("Yagi design", "Yagi tasarımı"),
+            Model::Wires(_) => tl("Wire model", "Tel modeli"),
         }
     }
 }
@@ -149,7 +152,7 @@ impl Project {
 
     pub fn load(path: &Path) -> Result<Self, String> {
         let s = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&s).map_err(|e| format!("Dosya okunamadı: {e}"))
+        serde_json::from_str(&s).map_err(|e| tf!("Could not read file: {e}", "Dosya okunamadı: {e}"))
     }
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;

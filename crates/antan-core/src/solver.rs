@@ -50,13 +50,13 @@ pub enum SolveError {
 impl std::fmt::Display for SolveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoWires => write!(f, "Modelde eleman yok"),
-            Self::NoSources => write!(f, "Besleme kaynağı tanımlı değil"),
-            Self::DegenerateWire(i) => write!(f, "{}. telin boyu ya da çapı geçersiz", i + 1),
-            Self::BadSource(i) => write!(f, "{}. kaynak geçerli bir noktada değil (serbest uç ya da olmayan tel)", i + 1),
-            Self::BelowGround(i) => write!(f, "{}. tel zeminin (z = 0) altına iniyor; yüksekliği artırın", i + 1),
-            Self::BadLoad(i) => write!(f, "{}. yük geçerli bir noktada değil (serbest uç, çoklu birleşim ya da olmayan tel)", i + 1),
-            Self::Singular => write!(f, "Empedans matrisi tekil; geometri çözülemedi"),
+            Self::NoWires => f.write_str(crate::i18n::t("No elements in the model", "Modelde eleman yok")),
+            Self::NoSources => f.write_str(crate::i18n::t("No feed source defined", "Besleme kaynağı tanımlı değil")),
+            Self::DegenerateWire(i) => f.write_str(&crate::tf!("Wire {}: invalid length or diameter", "{}. telin boyu ya da çapı geçersiz", i + 1)),
+            Self::BadSource(i) => f.write_str(&crate::tf!("Source {} is not at a valid point (free end or nonexistent wire)", "{}. kaynak geçerli bir noktada değil (serbest uç ya da olmayan tel)", i + 1)),
+            Self::BelowGround(i) => f.write_str(&crate::tf!("Wire {} goes below ground (z = 0); increase the height", "{}. tel zeminin (z = 0) altına iniyor; yüksekliği artırın", i + 1)),
+            Self::BadLoad(i) => f.write_str(&crate::tf!("Load {} is not at a valid point (free end, multi-wire junction or nonexistent wire)", "{}. yük geçerli bir noktada değil (serbest uç, çoklu birleşim ya da olmayan tel)", i + 1)),
+            Self::Singular => f.write_str(crate::i18n::t("Impedance matrix is singular; the geometry could not be solved", "Empedans matrisi tekil; geometri çözülemedi")),
         }
     }
 }

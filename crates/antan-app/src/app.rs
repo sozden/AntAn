@@ -1,10 +1,13 @@
-//! AntAn uygulama kabuğu: durum, menüler, düzen ve sekmeler.
+﻿//! AntAn uygulama kabuğu: durum, menüler, düzen ve sekmeler.
 
 use std::ops::Range;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use eframe::egui::{self, Color32, RichText, Vec2};
+use antan_core::i18n::{Language, language, set_language, t as tl};
+use antan_core::tf;
+
 
 use antan_core::farfield::{self, Pattern, PatternSummary};
 use antan_core::matching::{self, Reactive};
@@ -73,6 +76,13 @@ pub struct AntAnApp {
 impl AntAnApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::apply(&cc.egui_ctx);
+        // Dil: kayıtlı ayar; ANTAN_LANG=tr|en (doğrulama için) onu geçersiz kılar.
+        let lang = match std::env::var("ANTAN_LANG").ok().as_deref() {
+            Some("tr") => Language::Turkish,
+            Some("en") => Language::English,
+            _ => Settings::load().language,
+        };
+        set_language(lang);
         let project = match std::env::var("ANTAN_AUTOSHOT_TEMPLATE").ok().as_deref() {
             Some("moxon") => Project::template(Kind::Moxon, 144.3e6),
             Some("quad") => Project::template(Kind::Quad2, 144.3e6),
@@ -96,7 +106,7 @@ impl AntAnApp {
             committed: project.clone(),
             project,
             selected: 1,
-            status: "Hazır".into(),
+            status: tl("Ready", "Hazır").into(),
             path: None,
             undo: Vec::new(),
             redo: Vec::new(),
@@ -192,7 +202,7 @@ impl AntAnApp {
                 self.pattern = Some(pat);
                 let span = f * self.project.sweep_span_pct / 100.0;
                 self.sweep_job.start(ctx, self.antenna.clone(), f - span, f + span, self.project.sweep_points);
-                self.status = "Çözüldü".into();
+                self.status = tl("Solved", "Çözüldü").into();
             }
             Err(e) => {
                 self.pattern = None;
@@ -224,12 +234,12 @@ impl AntAnApp {
     // ------------------------------------------------------------ dosya
 
     fn open_dialog(&mut self) {
-        if let Some(path) = rfd::FileDialog::new().add_filter("AntAn projesi", &[project::EXT]).pick_file() {
+        if let Some(path) = rfd::FileDialog::new().add_filter(tl("AntAn project", "AntAn projesi"), &[project::EXT]).pick_file() {
             match Project::load(&path) {
                 Ok(p) => {
                     self.replace_project(p);
                     self.saved = self.project.clone();
-                    self.status = format!("Açıldı: {}", path.display());
+                    self.status = tf!("Opened: {}", "Açıldı: {}", path.display());
                     self.path = Some(path);
                 }
                 Err(e) => self.status = e,
@@ -240,27 +250,27 @@ impl AntAnApp {
     fn save(&mut self, ask: bool) {
         let path = match (&self.path, ask) {
             (Some(p), false) => Some(p.clone()),
-            _ => rfd::FileDialog::new().add_filter("AntAn projesi", &[project::EXT]).set_file_name(format!("{}.{}", self.project.model.name(), project::EXT)).save_file(),
+            _ => rfd::FileDialog::new().add_filter(tl("AntAn project", "AntAn projesi"), &[project::EXT]).set_file_name(format!("{}.{}", self.project.model.name(), project::EXT)).save_file(),
         };
         let Some(path) = path else { return };
         match self.project.save(&path) {
             Ok(()) => {
                 self.saved = self.project.clone();
-                self.status = format!("Kaydedildi: {}", path.display());
+                self.status = tf!("Saved: {}", "Kaydedildi: {}", path.display());
                 self.path = Some(path);
             }
-            Err(e) => self.status = format!("Kaydedilemedi: {e}"),
+            Err(e) => self.status = tf!("Could not save: {e}", "Kaydedilemedi: {e}"),
         }
     }
 
     fn export_nec(&mut self) {
-        let Some(path) = rfd::FileDialog::new().add_filter("NEC kart dosyası", &["nec"]).set_file_name(format!("{}.nec", self.project.model.name())).save_file() else { return };
+        let Some(path) = rfd::FileDialog::new().add_filter(tl("NEC card file", "NEC kart dosyası"), &["nec"]).set_file_name(format!("{}.nec", self.project.model.name())).save_file() else { return };
         let f = self.antenna.frequency;
         let span = f * self.project.sweep_span_pct / 100.0;
         let text = nec::export(&self.antenna, Some((f - span, f + span, self.project.sweep_points)));
         self.status = match std::fs::write(&path, text) {
-            Ok(()) => format!("NEC dosyası yazıldı: {}", path.display()),
-            Err(e) => format!("Yazılamadı: {e}"),
+            Ok(()) => tf!("NEC file written: {}", "NEC dosyası yazıldı: {}", path.display()),
+            Err(e) => tf!("Could not write: {e}", "Yazılamadı: {e}"),
         };
     }
 
@@ -298,21 +308,21 @@ impl AntAnApp {
 
     fn new_menu(&mut self, ui: &mut egui::Ui) {
         let f = self.project.model.frequency();
-        ui.label(RichText::new("Yagi-Uda (eleman bazlı)").small().color(theme::TEXT_DIM));
+        ui.label(RichText::new(tl("Yagi-Uda (element based)", "Yagi-Uda (eleman bazlı)")).small().color(theme::TEXT_DIM));
         for n in [2usize, 3, 4, 5, 6, 7, 9, 11] {
-            if ui.button(format!("{n} elemanlı Yagi")).clicked() {
+            if ui.button(tf!("{n}-element Yagi", "{n} elemanlı Yagi")).clicked() {
                 let mut p = Project::yagi(f, n);
                 p.z0 = self.project.z0;
                 self.replace_project(p);
                 ui.close();
             }
         }
-        if ui.button("7 elemanlı kademeli borulu Yagi (örnek)").clicked() {
+        if ui.button(tl("7-element tapered-tube Yagi (example)", "7 elemanlı kademeli borulu Yagi (örnek)")).clicked() {
             self.replace_project(tapered_demo());
             ui.close();
         }
         ui.separator();
-        ui.label(RichText::new("Tel modelleri").small().color(theme::TEXT_DIM));
+        ui.label(RichText::new(tl("Wire models", "Tel modelleri")).small().color(theme::TEXT_DIM));
         for k in Kind::ALL {
             if ui.button(k.label()).clicked() {
                 self.replace_project(Project::template(k, f));
@@ -324,46 +334,46 @@ impl AntAnApp {
     fn menu(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("Dosya", |ui| {
-                ui.menu_button("Yeni", |ui| self.new_menu(ui));
-                if ui.button("Aç…  (Ctrl+O)").clicked() {
+            ui.menu_button(tl("File", "Dosya"), |ui| {
+                ui.menu_button(tl("New", "Yeni"), |ui| self.new_menu(ui));
+                if ui.button(tl("Open…  (Ctrl+O)", "Aç…  (Ctrl+O)")).clicked() {
                     ui.close();
                     self.open_dialog();
                 }
-                if ui.button("Kaydet  (Ctrl+S)").clicked() {
+                if ui.button(tl("Save  (Ctrl+S)", "Kaydet  (Ctrl+S)")).clicked() {
                     ui.close();
                     self.save(false);
                 }
-                if ui.button("Farklı kaydet…").clicked() {
+                if ui.button(tl("Save as…", "Farklı kaydet…")).clicked() {
                     ui.close();
                     self.save(true);
                 }
                 ui.separator();
-                if ui.button("NEC-2 dosyası olarak dışa aktar…").clicked() {
+                if ui.button(tl("Export as NEC-2 file…", "NEC-2 dosyası olarak dışa aktar…")).clicked() {
                     ui.close();
                     self.export_nec();
                 }
-                if ui.button("Pencereyi PNG olarak kaydet…").clicked() {
+                if ui.button(tl("Save window as PNG…", "Pencereyi PNG olarak kaydet…")).clicked() {
                     ui.close();
                     self.save_png(&ctx);
                 }
                 ui.separator();
-                if ui.button("Çıkış").clicked() {
+                if ui.button(tl("Quit", "Çıkış")).clicked() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Düzen", |ui| {
-                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new("Geri al  (Ctrl+Z)")).clicked() {
+            ui.menu_button(tl("Edit", "Düzen"), |ui| {
+                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new(tl("Undo  (Ctrl+Z)", "Geri al  (Ctrl+Z)"))).clicked() {
                     self.undo();
                     ui.close();
                 }
-                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new("Yinele  (Ctrl+Y)")).clicked() {
+                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new(tl("Redo  (Ctrl+Y)", "Yinele  (Ctrl+Y)"))).clicked() {
                     self.redo();
                     ui.close();
                 }
                 ui.separator();
                 if let Model::Yagi(d) = &self.project.model {
-                    if ui.button("Tel modeline dönüştür").on_hover_text("Yagi tasarımını serbestçe düzenlenebilir tellere çevirir").clicked() {
+                    if ui.button(tl("Convert to wire model", "Tel modeline dönüştür")).on_hover_text(tl("Turns the Yagi design into freely editable wires", "Yagi tasarımını serbestçe düzenlenebilir tellere çevirir")).clicked() {
                         let mut p = self.project.clone();
                         p.model = Model::Wires(d.build());
                         self.replace_project(p);
@@ -371,16 +381,27 @@ impl AntAnApp {
                     }
                 }
             });
-            ui.menu_button("Görünüm", |ui| {
-                for (t, l) in [(Tab::Pattern3d, "3B diyagram"), (Tab::Cuts, "Kesitler ve akımlar"), (Tab::Sweep, "SWR / empedans / Smith"), (Tab::Matching, "Eşleme"), (Tab::Optimize, "İyileştirme")] {
+            ui.menu_button(tl("View", "Görünüm"), |ui| {
+                for (t, l) in [(Tab::Pattern3d, tl("3D pattern", "3B diyagram")), (Tab::Cuts, tl("Cuts and currents", "Kesitler ve akımlar")), (Tab::Sweep, tl("SWR / impedance / Smith", "SWR / empedans / Smith")), (Tab::Matching, tl("Matching", "Eşleme")), (Tab::Optimize, tl("Optimization", "İyileştirme"))] {
                     if ui.selectable_label(self.tab == t, l).clicked() {
                         self.tab = t;
                         ui.close();
                     }
                 }
             });
-            ui.menu_button("Yardım", |ui| {
-                if ui.button("AntAn hakkında").clicked() {
+            // Dil menüsü her iki dilde de okunabilsin diye iki dilli başlıklı.
+            ui.menu_button("🌐 Language / Dil", |ui| {
+                for (l, name) in [(Language::English, "English"), (Language::Turkish, "Türkçe")] {
+                    if ui.selectable_label(language() == l, name).clicked() {
+                        set_language(l);
+                        Settings { language: l }.save();
+                        self.status = tl("Language changed. New templates use the selected language.", "Dil değişti. Yeni şablonlar seçilen dili kullanır.").into();
+                        ui.close();
+                    }
+                }
+            });
+            ui.menu_button(tl("Help", "Yardım"), |ui| {
+                if ui.button(tl("About AntAn", "AntAn hakkında")).clicked() {
                     self.show_about = true;
                     ui.close();
                 }
@@ -391,26 +412,26 @@ impl AntAnApp {
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("AntAn").size(20.0).strong().color(theme::ACCENT));
-            ui.label(RichText::new("anten analiz ve hesaplama").color(theme::TEXT_DIM));
+            ui.label(RichText::new(tl("antenna analysis and design", "anten analiz ve hesaplama")).color(theme::TEXT_DIM));
             ui.separator();
-            ui.menu_button("➕ Yeni", |ui| self.new_menu(ui));
-            if ui.button("📂 Aç").clicked() {
+            ui.menu_button(tl("➕ New", "➕ Yeni"), |ui| self.new_menu(ui));
+            if ui.button(tl("📂 Open", "📂 Aç")).clicked() {
                 self.open_dialog();
             }
-            if ui.button("💾 Kaydet").clicked() {
+            if ui.button(tl("💾 Save", "💾 Kaydet")).clicked() {
                 self.save(false);
             }
             ui.separator();
-            if ui.add_enabled(!self.undo.is_empty(), egui::Button::new("↶")).on_hover_text("Geri al").clicked() {
+            if ui.add_enabled(!self.undo.is_empty(), egui::Button::new("↶")).on_hover_text(tl("Undo", "Geri al")).clicked() {
                 self.undo();
             }
-            if ui.add_enabled(!self.redo.is_empty(), egui::Button::new("↷")).on_hover_text("Yinele").clicked() {
+            if ui.add_enabled(!self.redo.is_empty(), egui::Button::new("↷")).on_hover_text(tl("Redo", "Yinele")).clicked() {
                 self.redo();
             }
             ui.separator();
-            ui.label("Bant:");
+            ui.label(tl("Band:", "Bant:"));
             for (label, f) in [("10 m", 28.5e6), ("6 m", 50.15e6), ("2 m", 144.3e6), ("70 cm", 432.2e6), ("23 cm", 1296.2e6)] {
-                if ui.small_button(label).on_hover_text(if self.scale_with_freq { "Frekansı değiştir ve geometriyi ölçekle" } else { "Yalnız analiz frekansını değiştir" }).clicked() {
+                if ui.small_button(label).on_hover_text(if self.scale_with_freq { tl("Change frequency and scale the geometry", "Frekansı değiştir ve geometriyi ölçekle") } else { tl("Change the analysis frequency only", "Yalnız analiz frekansını değiştir") }).clicked() {
                     let old = self.project.model.frequency();
                     self.project.model.set_frequency(f);
                     if self.scale_with_freq {
@@ -418,7 +439,7 @@ impl AntAnApp {
                     }
                 }
             }
-            ui.checkbox(&mut self.scale_with_freq, "ölçekle").on_hover_text("İşaretliyse bant değişince tüm boyutlar yeni dalga boyuna ölçeklenir");
+            ui.checkbox(&mut self.scale_with_freq, tl("scale", "ölçekle")).on_hover_text(tl("When checked, all dimensions are scaled to the new wavelength on band change", "İşaretliyse bant değişince tüm boyutlar yeni dalga boyuna ölçeklenir"));
         });
     }
 
@@ -439,20 +460,20 @@ impl AntAnApp {
                     ui.separator();
                     ui.label(format!("G {:.2} dBi", sm.max_gain_dbi));
                     ui.separator();
-                    ui.label(format!("Ö/A {:.1} dB", sm.front_to_back_db));
+                    ui.label(tf!("F/B {:.1} dB", "Ö/A {:.1} dB", sm.front_to_back_db));
                 }
                 ui.separator();
-                ui.label(format!("Verim {:.1}%", s.efficiency() * 100.0));
+                ui.label(tf!("Efficiency {:.1}%", "Verim {:.1}%", s.efficiency() * 100.0));
                 ui.separator();
-                ui.label(RichText::new(format!("{} bilinmeyen · {:.0} ms", s.basis.len(), self.solve_ms)).small().color(theme::TEXT_DIM));
+                ui.label(RichText::new(tf!("{} unknowns · {:.0} ms", "{} bilinmeyen · {:.0} ms", s.basis.len(), self.solve_ms)).small().color(theme::TEXT_DIM));
             }
             if self.sweep_job.pending() {
                 ui.separator();
                 ui.spinner();
-                ui.label(RichText::new("tarama…").small());
+                ui.label(RichText::new(tl("sweep…", "tarama…")).small());
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let name = self.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "kaydedilmedi".into());
+                let name = self.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| tl("not saved", "kaydedilmedi").into());
                 ui.label(RichText::new(name).small().color(theme::TEXT_DIM));
                 ui.separator();
                 ui.label(RichText::new(self.project.model.ground().label()).small().color(theme::TEXT_DIM));
@@ -462,15 +483,15 @@ impl AntAnApp {
 
     fn about(&mut self, ctx: &egui::Context) {
         let mut open = self.show_about;
-        egui::Window::new("AntAn hakkında").open(&mut open).collapsible(false).resizable(false).default_width(460.0).show(ctx, |ui| {
-            ui.label(RichText::new("AntAn — anten analiz ve hesaplama").heading().color(theme::ACCENT));
-            ui.label(format!("Sürüm {}", env!("CARGO_PKG_VERSION")));
+        egui::Window::new(tl("About AntAn", "AntAn hakkında")).open(&mut open).collapsible(false).resizable(false).default_width(460.0).show(ctx, |ui| {
+            ui.label(RichText::new(tl("AntAn — antenna analysis and design", "AntAn — anten analiz ve hesaplama")).heading().color(theme::ACCENT));
+            ui.label(tf!("Version {}", "Sürüm {}", env!("CARGO_PKG_VERSION")));
             ui.add_space(6.0);
-            ui.label("Çözücü: serbest uzayda ince tel moment yöntemi (Harrington, karışık potansiyel, darbe tabanlı / nokta eşlemeli). Tel birleşimleri, iletken kaybı (deri etkisi, boru et kalınlığı) ve kademeli elemanlar desteklenir.");
+            ui.label(tl("Solver: thin-wire method of moments (Harrington, mixed potential, pulse basis / point matching). Supports wire junctions, ground (perfect and real), lumped loads, conductor loss (skin effect, tube wall thickness) and tapered elements.", "Çözücü: ince tel moment yöntemi (Harrington, karışık potansiyel, darbe tabanlı / nokta eşlemeli). Tel birleşimleri, zemin (kusursuz ve gerçek), toplu yükler, iletken kaybı (deri etkisi, boru et kalınlığı) ve kademeli elemanlar desteklenir."));
             ui.add_space(4.0);
-            ui.label("Doğrulama: yarım dalga dipol (≈73 + j42 Ω, 2.15 dBi), enerji korunumu (kazanç = yönlülük), Kirchhoff akım yasası, bölünmüş/tek parça eşdeğerliği.");
+            ui.label(tl("Validation: half-wave dipole (≈73 + j42 Ω, 2.15 dBi), energy conservation (gain = directivity), Kirchhoff's current law, split/single-wire equivalence, explicit image equivalence over ground.", "Doğrulama: yarım dalga dipol (≈73 + j42 Ω, 2.15 dBi), enerji korunumu (kazanç = yönlülük), Kirchhoff akım yasası, bölünmüş/tek parça eşdeğerliği."));
             ui.add_space(4.0);
-            ui.label(RichText::new("Sınırlar: toprak etkisi henüz yok (serbest uzay); NEC ile birkaç yüzdelik farklar normaldir.").color(theme::TEXT_DIM));
+            ui.label(RichText::new(tl("Limitations: over real ground, soil loss does not enter the feed impedance; differences of a few percent from NEC are normal.", "Sınırlar: gerçek zeminde toprak kaybı besleme empedansına girmez; NEC ile birkaç yüzdelik farklar normaldir.")).color(theme::TEXT_DIM));
         });
         self.show_about = open;
     }
@@ -493,35 +514,34 @@ impl AntAnApp {
         let z = sol.impedance();
         let swr = matching::swr(z, self.project.z0);
         let lambda = C0 / self.antenna.frequency;
-        Self::kpi(ui, "Kazanç", format!("{:.2} dBi", s.max_gain_dbi), format!("{:.2} dBd · yönlülük {:.2} dBi", s.max_gain_dbi - 2.15, s.directivity_dbi), Color32::WHITE);
-        Self::kpi(ui, "Ön / arka", format!("{:.1} dB", s.front_to_back_db), String::new(), theme::ACCENT);
+        Self::kpi(ui, tl("Gain", "Kazanç"), format!("{:.2} dBi", s.max_gain_dbi), tf!("{:.2} dBd · directivity {:.2} dBi", "{:.2} dBd · yönlülük {:.2} dBi", s.max_gain_dbi - 2.15, s.directivity_dbi), Color32::WHITE);
+        Self::kpi(ui, tl("Front / back", "Ön / arka"), format!("{:.1} dB", s.front_to_back_db), String::new(), theme::ACCENT);
         let ground = self.antenna.ground;
         if !ground.is_free() {
             let (lo, hi) = self.antenna.bounds();
             Self::kpi(
                 ui,
-                "Kalkış açısı",
+                tl("Takeoff angle", "Kalkış açısı"),
                 format!("{:.0}°", 90.0 - s.max_theta.to_degrees()),
-                format!("{} · yükseklik {:.2}–{:.2} m", ground.label(), lo[2].max(0.0), hi[2]),
+                tf!("{} · height {:.2}–{:.2} m", "{} · yükseklik {:.2}–{:.2} m", ground.label(), lo[2].max(0.0), hi[2]),
                 theme::WARM,
             );
         }
-        Self::kpi(ui, "Besleme empedansı", fmt_z(z), format!("|Γ| = {:.3} · RL {:.1} dB", matching::reflection(z, self.project.z0).norm(), matching::return_loss_db(z, self.project.z0)), Color32::WHITE);
+        Self::kpi(ui, tl("Feed impedance", "Besleme empedansı"), fmt_z(z), format!("|Γ| = {:.3} · RL {:.1} dB", matching::reflection(z, self.project.z0).norm(), matching::return_loss_db(z, self.project.z0)), Color32::WHITE);
         Self::kpi(ui, &format!("SWR ({:.0} Ω)", self.project.z0), format!("{swr:.2}"), match self.band() {
-            Some((lo, hi)) => format!("2:1 bant: {:.2}–{:.2} MHz ({:.0} kHz)", lo / 1e6, hi / 1e6, (hi - lo) / 1e3),
-            None if self.sweep_job.pending() => "bant hesaplanıyor…".into(),
-            None => "2:1 bant yok".into(),
+            Some((lo, hi)) => tf!("2:1 band: {:.2}–{:.2} MHz ({:.0} kHz)", "2:1 bant: {:.2}–{:.2} MHz ({:.0} kHz)", lo / 1e6, hi / 1e6, (hi - lo) / 1e3),
+            None if self.sweep_job.pending() => tl("computing bandwidth…", "bant hesaplanıyor…").into(),
+            None => tl("no 2:1 band", "2:1 bant yok").into(),
         }, theme::swr_color(swr));
-        Self::kpi(ui, "Huzme genişliği (−3 dB)", format!("{:.0}° / {:.0}°", s.beamwidth_az_deg, s.beamwidth_el_deg), "yatay / düşey".into(), Color32::WHITE);
+        Self::kpi(ui, tl("Beamwidth (−3 dB)", "Huzme genişliği (−3 dB)"), format!("{:.0}° / {:.0}°", s.beamwidth_az_deg, s.beamwidth_el_deg), tl("horizontal / vertical", "yatay / düşey").into(), Color32::WHITE);
         let (lo, hi) = self.antenna.bounds();
         Self::kpi(
             ui,
-            "Verim ve boyut",
+            tl("Efficiency and size", "Verim ve boyut"),
             format!("{:.2} %", sol.efficiency() * 100.0),
-            format!(
-                "kayıp {:.3} dB{} · {:.0} × {:.0} × {:.0} mm (X·Y·Z), en büyük {:.2} λ",
+            tf!("loss {:.3} dB{} · {:.0} × {:.0} × {:.0} mm (X·Y·Z), largest {:.2} λ", "kayıp {:.3} dB{} · {:.0} × {:.0} × {:.0} mm (X·Y·Z), en büyük {:.2} λ",
                 -10.0 * sol.efficiency().max(1e-9).log10(),
-                if sol.loads.is_empty() { String::new() } else { format!(" (yüklerde %{:.1})", sol.loads.iter().map(|l| l.power).sum::<f64>() / sol.input_power * 100.0) },
+                if sol.loads.is_empty() { String::new() } else { tf!(" ({:.1}% in loads)", " (yüklerde %{:.1})", sol.loads.iter().map(|l| l.power).sum::<f64>() / sol.input_power * 100.0) },
                 (hi[0] - lo[0]) * 1e3,
                 (hi[1] - lo[1]) * 1e3,
                 (hi[2] - lo[2]) * 1e3,
@@ -565,16 +585,16 @@ impl AntAnApp {
         let el = farfield::elevation_cut(sol, s.max_phi, 360);
         let mut range = self.cut_range_db;
         ui.horizontal(|ui| {
-            ui.label("Ölçek aralığı");
+            ui.label(tl("Scale range", "Ölçek aralığı"));
             ui.add(egui::Slider::new(&mut range, 10.0..=60.0).suffix(" dB"));
-            ui.label(RichText::new(format!("Yatay kesit θ = {:.0}° (yükseliş {:.0}°), düşey kesit φ = {:.0}°", s.max_theta.to_degrees(), 90.0 - s.max_theta.to_degrees(), s.max_phi.to_degrees())).color(theme::TEXT_DIM));
+            ui.label(RichText::new(tf!("Horizontal cut θ = {:.0}° (elevation {:.0}°), vertical cut φ = {:.0}°", "Yatay kesit θ = {:.0}° (yükseliş {:.0}°), düşey kesit φ = {:.0}°", s.max_theta.to_degrees(), 90.0 - s.max_theta.to_degrees(), s.max_phi.to_degrees())).color(theme::TEXT_DIM));
         });
         let avail = ui.available_size();
         let h = ((avail.y - 190.0).max(260.0)).min(avail.x * 0.5 - 6.0);
         let w = (avail.x - 8.0) * 0.5;
         ui.horizontal_top(|ui| {
-            viz::polar_plot(ui, Vec2::new(w, h), "Yatay (azimut) kesit", &az, Polar::Azimuth, range, &PolarInfo { max_gain_dbi: s.max_gain_dbi, beamwidth_deg: s.beamwidth_az_deg, fb_db: s.front_to_back_db });
-            viz::polar_plot(ui, Vec2::new(w, h), "Düşey (yükseliş) kesit", &el, Polar::Elevation, range, &PolarInfo { max_gain_dbi: s.max_gain_dbi, beamwidth_deg: s.beamwidth_el_deg, fb_db: s.front_to_back_db });
+            viz::polar_plot(ui, Vec2::new(w, h), tl("Horizontal (azimuth) cut", "Yatay (azimut) kesit"), &az, Polar::Azimuth, range, &PolarInfo { max_gain_dbi: s.max_gain_dbi, beamwidth_deg: s.beamwidth_az_deg, fb_db: s.front_to_back_db });
+            viz::polar_plot(ui, Vec2::new(w, h), tl("Vertical (elevation) cut", "Düşey (yükseliş) kesit"), &el, Polar::Elevation, range, &PolarInfo { max_gain_dbi: s.max_gain_dbi, beamwidth_deg: s.beamwidth_el_deg, fb_db: s.front_to_back_db });
         });
         ui.add_space(6.0);
         // Elemanların akım dağılımı (Yagi: her elemanın orta teli + bölümleri birleşik).
@@ -609,21 +629,21 @@ impl AntAnApp {
 
     fn sweep_tab(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label("Tarama: ±");
+            ui.label(tl("Sweep: ±", "Tarama: ±"));
             ui.add(egui::DragValue::new(&mut self.project.sweep_span_pct).range(0.2..=40.0).speed(0.1).suffix(" %"));
-            ui.label("nokta");
+            ui.label(tl("points", "nokta"));
             ui.add(egui::DragValue::new(&mut self.project.sweep_points).range(5..=401));
             if self.sweep_job.pending() {
                 ui.spinner();
-                ui.label("hesaplanıyor (tüm çekirdekler)…");
+                ui.label(tl("computing (all cores)…", "hesaplanıyor (tüm çekirdekler)…"));
             }
             if let Some((lo, hi)) = self.band() {
                 ui.separator();
-                ui.label(RichText::new(format!("SWR < 2 bandı: {:.3} – {:.3} MHz  ({:.0} kHz, %{:.2})", lo / 1e6, hi / 1e6, (hi - lo) / 1e3, (hi - lo) / self.antenna.frequency * 100.0)).color(theme::GOOD));
+                ui.label(RichText::new(tf!("SWR < 2 band: {:.3} – {:.3} MHz  ({:.0} kHz, {:.2}%)", "SWR < 2 bandı: {:.3} – {:.3} MHz  ({:.0} kHz, %{:.2})", lo / 1e6, hi / 1e6, (hi - lo) / 1e3, (hi - lo) / self.antenna.frequency * 100.0)).color(theme::GOOD));
             }
         });
         let Some(sweep) = self.sweep.clone() else {
-            ui.weak("Tarama sonucu bekleniyor…");
+            ui.weak(tl("Waiting for sweep result…", "Tarama sonucu bekleniyor…"));
             return;
         };
         let avail = ui.available_size();
@@ -668,7 +688,7 @@ impl AntAnApp {
         let z0 = self.project.z0;
         let f = self.antenna.frequency;
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Besleme: {}", fmt_z(z))).size(16.0).strong());
+            ui.label(RichText::new(tf!("Feed: {}", "Besleme: {}", fmt_z(z))).size(16.0).strong());
             let swr = matching::swr(z, z0);
             ui.label(RichText::new(format!("SWR {swr:.2} ({z0:.0} Ω)")).size(16.0).color(theme::swr_color(swr)));
         });
@@ -687,30 +707,30 @@ impl AntAnApp {
         let driven_d = self.antenna.wires.get(self.antenna.sources[0].wire).map(|w| w.diameter).unwrap_or(0.01);
         let (mut rod, mut spacing) = (self.project.match_rod, self.project.match_spacing);
         ui.columns(3, |cols| {
-            card(&mut cols[0], "L devresi (toplu elemanlar)", &mut |ui| {
+            card(&mut cols[0], tl("L network (lumped components)", "L devresi (toplu elemanlar)"), &mut |ui| {
                 let nets = matching::l_network(z, z0, f);
                 if nets.is_empty() {
-                    ui.weak("Bu empedans için L devresi gerekmez ya da çözüm yok.");
+                    ui.weak(tl("No L network is needed or possible for this impedance.", "Bu empedans için L devresi gerekmez ya da çözüm yok."));
                 }
                 for (i, n) in nets.iter().enumerate() {
-                    ui.label(RichText::new(format!("Çözüm {}", i + 1)).strong());
-                    ui.label(RichText::new(if n.shunt_at_load { "Yüke paralel eleman, hat tarafına seri eleman" } else { "Yüke seri eleman, hat tarafına paralel eleman" }).color(theme::TEXT_DIM));
-                    ui.label(format!("  Seri:    {}", reactive_str(n.series)));
-                    ui.label(format!("  Paralel: {}", reactive_str(n.shunt)));
+                    ui.label(RichText::new(tf!("Solution {}", "Çözüm {}", i + 1)).strong());
+                    ui.label(RichText::new(if n.shunt_at_load { tl("Shunt element at the load, series element towards the line", "Yüke paralel eleman, hat tarafına seri eleman") } else { tl("Series element at the load, shunt element towards the line", "Yüke seri eleman, hat tarafına paralel eleman") }).color(theme::TEXT_DIM));
+                    ui.label(tf!("  Series:  {}", "  Seri:    {}", reactive_str(n.series)));
+                    ui.label(tf!("  Shunt:   {}", "  Paralel: {}", reactive_str(n.shunt)));
                     let check = matching::l_network_input(z, n, f);
-                    ui.label(RichText::new(format!("  Kontrol: {}", fmt_z(check))).small().color(theme::TEXT_DIM));
+                    ui.label(RichText::new(tf!("  Check:   {}", "  Kontrol: {}", fmt_z(check))).small().color(theme::TEXT_DIM));
                     ui.add_space(4.0);
                 }
             });
-            card(&mut cols[1], "Hairpin (beta) eşleme", &mut |ui| {
+            card(&mut cols[1], tl("Hairpin (beta) match", "Hairpin (beta) eşleme"), &mut |ui| {
                 egui::Grid::new("hp").num_columns(2).show(ui, |ui| {
-                    ui.label("Çubuk çapı");
+                    ui.label(tl("Rod diameter", "Çubuk çapı"));
                     let mut v = rod * 1e3;
                     if ui.add(egui::DragValue::new(&mut v).range(0.5..=30.0).speed(0.1).suffix(" mm")).changed() {
                         rod = v / 1e3;
                     }
                     ui.end_row();
-                    ui.label("Çubuk aralığı (merkez)");
+                    ui.label(tl("Rod spacing (center)", "Çubuk aralığı (merkez)"));
                     let mut v = spacing * 1e3;
                     if ui.add(egui::DragValue::new(&mut v).range(2.0..=300.0).speed(0.5).suffix(" mm")).changed() {
                         spacing = v / 1e3;
@@ -719,31 +739,31 @@ impl AntAnApp {
                 });
                 match matching::hairpin(z, z0, f, rod, spacing) {
                     Some(h) => {
-                        ui.label(format!("Gerekli eleman reaktansı: {:.1} Ω", h.required_reactance));
-                        let change = if h.reactance_change.abs() < 0.5 { "uygun ✔".to_string() } else if h.reactance_change < 0.0 { format!("{:.1} Ω daha kapasitif → elemanı kısaltın", -h.reactance_change) } else { format!("{:.1} Ω daha endüktif → elemanı uzatın", h.reactance_change) };
-                        ui.label(RichText::new(format!("Şu anki durum: {change}")).color(if h.reactance_change.abs() < 0.5 { theme::GOOD } else { theme::WARM }));
-                        ui.label(format!("Hairpin endüktansı: {:.1} nH ({:.1} Ω)", h.inductance * 1e9, h.shunt_reactance));
-                        ui.label(RichText::new(format!("Hairpin boyu: {:.1} mm", h.length * 1e3)).strong());
-                        ui.label(RichText::new(format!("(çift hat Z₀ = {:.0} Ω, kısa devre ucu)", h.line_z0)).small().color(theme::TEXT_DIM));
+                        ui.label(tf!("Required element reactance: {:.1} Ω", "Gerekli eleman reaktansı: {:.1} Ω", h.required_reactance));
+                        let change = if h.reactance_change.abs() < 0.5 { tl("OK ✔", "uygun ✔").to_string() } else if h.reactance_change < 0.0 { tf!("{:.1} Ω more capacitive → shorten the element", "{:.1} Ω daha kapasitif → elemanı kısaltın", -h.reactance_change) } else { tf!("{:.1} Ω more inductive → lengthen the element", "{:.1} Ω daha endüktif → elemanı uzatın", h.reactance_change) };
+                        ui.label(RichText::new(tf!("Current state: {change}", "Şu anki durum: {change}")).color(if h.reactance_change.abs() < 0.5 { theme::GOOD } else { theme::WARM }));
+                        ui.label(tf!("Hairpin inductance: {:.1} nH ({:.1} Ω)", "Hairpin endüktansı: {:.1} nH ({:.1} Ω)", h.inductance * 1e9, h.shunt_reactance));
+                        ui.label(RichText::new(tf!("Hairpin length: {:.1} mm", "Hairpin boyu: {:.1} mm", h.length * 1e3)).strong());
+                        ui.label(RichText::new(tf!("(two-wire line Z₀ = {:.0} Ω, shorted end)", "(çift hat Z₀ = {:.0} Ω, kısa devre ucu)", h.line_z0)).small().color(theme::TEXT_DIM));
                     }
                     None => {
-                        ui.label(RichText::new("Hairpin için besleme direnci Z₀'dan küçük olmalı.").color(theme::WARM));
+                        ui.label(RichText::new(tl("For a hairpin the feed resistance must be below Z₀.", "Hairpin için besleme direnci Z₀'dan küçük olmalı.")).color(theme::WARM));
                     }
                 }
             });
-            card(&mut cols[2], "Gamma eşleme", &mut |ui| {
-                ui.label(RichText::new(format!("Eleman çapı {:.1} mm; çubuk/aralık hairpin ile ortak.", driven_d * 1e3)).small().color(theme::TEXT_DIM));
+            card(&mut cols[2], tl("Gamma match", "Gamma eşleme"), &mut |ui| {
+                ui.label(RichText::new(tf!("Element diameter {:.1} mm; rod/spacing shared with the hairpin.", "Eleman çapı {:.1} mm; çubuk/aralık hairpin ile ortak.", driven_d * 1e3)).small().color(theme::TEXT_DIM));
                 let p = matching::GammaParams { element_diameter: driven_d, rod_diameter: rod, spacing };
                 match matching::gamma(z, z0, f, p) {
                     Some(g) => {
-                        ui.label(RichText::new(format!("Gamma çubuğu boyu: {:.1} mm", g.length * 1e3)).strong());
-                        ui.label(RichText::new(format!("Seri kondansatör: {:.1} pF", g.capacitance * 1e12)).strong());
-                        ui.label(format!("Empedans yükseltme oranı: {:.2}×", g.step_up));
-                        ui.label(format!("Gamma bölümü hat Z₀: {:.0} Ω", g.line_z0));
-                        ui.label(RichText::new("Yaklaşık model (Healey). Rezonanstaki elemanla en iyi sonuç verir.").small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new(tf!("Gamma rod length: {:.1} mm", "Gamma çubuğu boyu: {:.1} mm", g.length * 1e3)).strong());
+                        ui.label(RichText::new(tf!("Series capacitor: {:.1} pF", "Seri kondansatör: {:.1} pF", g.capacitance * 1e12)).strong());
+                        ui.label(tf!("Impedance step-up ratio: {:.2}×", "Empedans yükseltme oranı: {:.2}×", g.step_up));
+                        ui.label(tf!("Gamma section line Z₀: {:.0} Ω", "Gamma bölümü hat Z₀: {:.0} Ω", g.line_z0));
+                        ui.label(RichText::new(tl("Approximate model (Healey). Works best with a resonant element.", "Yaklaşık model (Healey). Rezonanstaki elemanla en iyi sonuç verir.")).small().color(theme::TEXT_DIM));
                     }
                     None => {
-                        ui.label(RichText::new("Bu geometri için çözüm bulunamadı (çubuk boyu 0.2 λ'yı aşıyor).").color(theme::WARM));
+                        ui.label(RichText::new(tl("No solution for this geometry (rod length exceeds 0.2 λ).", "Bu geometri için çözüm bulunamadı (çubuk boyu 0.2 λ'yı aşıyor).")).color(theme::WARM));
                     }
                 }
             });
@@ -755,30 +775,30 @@ impl AntAnApp {
             ui.add_space(8.0);
             egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(6.0).inner_margin(10.0).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(RichText::new("Sürülen elemanı otomatik ayarla").strong().color(theme::ACCENT));
-                ui.label(RichText::new("Sürülen elemanın boyu, gerçek çözücüyle yinelenerek hedef besleme reaktansına getirilir.").small().color(theme::TEXT_DIM));
+                ui.label(RichText::new(tl("Auto-tune the driven element", "Sürülen elemanı otomatik ayarla")).strong().color(theme::ACCENT));
+                ui.label(RichText::new(tl("The driven element length is iterated with the full solver until the feed reactance hits the target.", "Sürülen elemanın boyu, gerçek çözücüyle yinelenerek hedef besleme reaktansına getirilir.")).small().color(theme::TEXT_DIM));
                 ui.horizontal(|ui| {
-                    if ui.button("Rezonansa getir (X = 0, gamma/doğrudan besleme)").clicked() {
+                    if ui.button(tl("Make resonant (X = 0, gamma/direct feed)", "Rezonansa getir (X = 0, gamma/doğrudan besleme)")).clicked() {
                         match d.tune_driven(|_| Some(0.0)) {
                             Some((nd, nz)) => {
                                 let mut p = self.project.clone();
                                 p.model = Model::Yagi(nd.clone());
                                 apply = Some(p);
-                                self.tune_msg = Some(format!("Sürülen eleman {:.1} → {:.1} mm, Z = {}", d.elements[d.driven].length * 1e3, nd.elements[d.driven].length * 1e3, fmt_z(nz)));
+                                self.tune_msg = Some(tf!("Driven element {:.1} → {:.1} mm, Z = {}", "Sürülen eleman {:.1} → {:.1} mm, Z = {}", d.elements[d.driven].length * 1e3, nd.elements[d.driven].length * 1e3, fmt_z(nz)));
                             }
-                            None => self.tune_msg = Some("Ayar yakınsamadı.".into()),
+                            None => self.tune_msg = Some(tl("Tuning did not converge.", "Ayar yakınsamadı.").into()),
                         }
                     }
-                    if ui.button("Hairpin için kapasitif yap (X = −√(R(Z₀−R)))").clicked() {
+                    if ui.button(tl("Make capacitive for hairpin (X = −√(R(Z₀−R)))", "Hairpin için kapasitif yap (X = −√(R(Z₀−R)))")).clicked() {
                         match d.tune_driven(|zz| (zz.re < z0).then(|| -(zz.re * (z0 - zz.re)).sqrt())) {
                             Some((nd, nz)) => {
                                 let mut p = self.project.clone();
                                 p.model = Model::Yagi(nd.clone());
                                 apply = Some(p);
-                                let hl = matching::hairpin(nz, z0, f, rod, spacing).map(|h| format!(", hairpin {:.1} mm", h.length * 1e3)).unwrap_or_default();
-                                self.tune_msg = Some(format!("Sürülen eleman {:.1} → {:.1} mm, Z = {}{hl}", d.elements[d.driven].length * 1e3, nd.elements[d.driven].length * 1e3, fmt_z(nz)));
+                                let hl = matching::hairpin(nz, z0, f, rod, spacing).map(|h| tf!(", hairpin {:.1} mm", ", hairpin {:.1} mm", h.length * 1e3)).unwrap_or_default();
+                                self.tune_msg = Some(tf!("Driven element {:.1} → {:.1} mm, Z = {}{hl}", "Sürülen eleman {:.1} → {:.1} mm, Z = {}{hl}", d.elements[d.driven].length * 1e3, nd.elements[d.driven].length * 1e3, fmt_z(nz)));
                             }
-                            None => self.tune_msg = Some("Ayar yakınsamadı (R ≥ Z₀ olabilir).".into()),
+                            None => self.tune_msg = Some(tl("Tuning did not converge (R may be ≥ Z₀).", "Ayar yakınsamadı (R ≥ Z₀ olabilir).").into()),
                         }
                     }
                 });
@@ -804,7 +824,7 @@ impl AntAnApp {
             p.model = Model::Yagi(best);
             p.goals = goals.clone();
             self.replace_project(p);
-            self.status = "İyileştirme sonucu uygulandı (Ctrl+Z ile geri alınabilir)".into();
+            self.status = tl("Optimization result applied (Ctrl+Z to undo)", "İyileştirme sonucu uygulandı (Ctrl+Z ile geri alınabilir)").into();
         }
         self.project.goals = goals;
     }
@@ -829,7 +849,7 @@ fn tapered_demo() -> Project {
         tip: Tube::aluminum(0.010, Some(0.001)),
     };
     let mut d = YagiDesign::standard(144.3e6, 7, profile);
-    d.name = "7 el. kademeli Yagi".into();
+    d.name = tl("7-el. tapered Yagi", "7 el. kademeli Yagi").into();
     Project::with_model(Model::Yagi(d))
 }
 
@@ -844,14 +864,14 @@ impl eframe::App for AntAnApp {
                 Ok(s) => self.sweep = Some(s),
                 Err(e) => {
                     self.sweep = None;
-                    self.status = format!("Tarama: {e}");
+                    self.status = tf!("Sweep: {e}", "Tarama: {e}");
                 }
             }
         }
         if let Some(res) = self.shotter.poll(&ctx) {
             self.status = match res {
-                Ok(p) => format!("Görüntü kaydedildi: {}", p.display()),
-                Err(e) => format!("Görüntü kaydedilemedi: {e}"),
+                Ok(p) => tf!("Image saved: {}", "Görüntü kaydedildi: {}", p.display()),
+                Err(e) => tf!("Could not save image: {e}", "Görüntü kaydedilemedi: {e}"),
             };
             if self.autoshot.is_some() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -899,7 +919,7 @@ impl eframe::App for AntAnApp {
         });
         egui::CentralPanel::default().show(ui, |ui| {
             ui.horizontal(|ui| {
-                for (t, l) in [(Tab::Pattern3d, "🌐 3B diyagram"), (Tab::Cuts, "◔ Kesitler ve akımlar"), (Tab::Sweep, "📈 SWR / Smith"), (Tab::Matching, "🔌 Eşleme"), (Tab::Optimize, "⚙ İyileştirme")] {
+                for (t, l) in [(Tab::Pattern3d, tl("🌐 3D pattern", "🌐 3B diyagram")), (Tab::Cuts, tl("◔ Cuts and currents", "◔ Kesitler ve akımlar")), (Tab::Sweep, tl("📈 SWR / Smith", "📈 SWR / Smith")), (Tab::Matching, tl("🔌 Matching", "🔌 Eşleme")), (Tab::Optimize, tl("⚙ Optimization", "⚙ İyileştirme"))] {
                     let sel = self.tab == t;
                     if ui.add(egui::Button::selectable(sel, RichText::new(l).size(14.0))).clicked() {
                         self.tab = t;
@@ -910,7 +930,7 @@ impl eframe::App for AntAnApp {
             if self.sol().is_none() && self.tab != Tab::Optimize {
                 ui.add_space(40.0);
                 ui.vertical_centered(|ui| {
-                    ui.label(RichText::new("Çözüm yok").heading().color(theme::BAD));
+                    ui.label(RichText::new(tl("No solution", "Çözüm yok")).heading().color(theme::BAD));
                     ui.label(self.status.clone());
                 });
                 return;
@@ -930,5 +950,33 @@ impl eframe::App for AntAnApp {
         };
         self.selected = self.selected.min(n.saturating_sub(1));
         self.track_undo(&ctx);
+    }
+}
+
+/// Kullanıcı ayarları (şimdilik yalnız dil): Windows'ta %APPDATA%\AntAn\settings.json,
+/// diğer sistemlerde ~/.config/antan/settings.json.
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[serde(default)]
+struct Settings {
+    language: Language,
+}
+
+impl Settings {
+    fn path() -> Option<PathBuf> {
+        let base = std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("AntAn")).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("antan")))?;
+        Some(base.join("settings.json"))
+    }
+    fn load() -> Self {
+        Self::path().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    }
+    fn save(&self) {
+        if let Some(p) = Self::path() {
+            if let Some(dir) = p.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if let Ok(s) = serde_json::to_string_pretty(self) {
+                let _ = std::fs::write(p, s);
+            }
+        }
     }
 }

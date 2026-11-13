@@ -130,10 +130,10 @@ impl LoadKind {
     }
     pub fn label(&self) -> &'static str {
         match self {
-            LoadKind::SeriesRlc { .. } => "Seri RLC (bobin/kondansatör)",
-            LoadKind::ParallelRlc { .. } => "Paralel RLC",
-            LoadKind::Trap { .. } => "Tuzak (paralel LC, Q)",
-            LoadKind::Fixed { .. } => "Sabit R + jX",
+            LoadKind::SeriesRlc { .. } => crate::i18n::t("Series RLC (coil/capacitor)", "Seri RLC (bobin/kondansatör)"),
+            LoadKind::ParallelRlc { .. } => crate::i18n::t("Parallel RLC", "Paralel RLC"),
+            LoadKind::Trap { .. } => crate::i18n::t("Trap (parallel LC, Q)", "Tuzak (paralel LC, Q)"),
+            LoadKind::Fixed { .. } => crate::i18n::t("Fixed R + jX", "Sabit R + jX"),
         }
     }
     /// Tuzak kondansatörü (F).
@@ -175,20 +175,22 @@ impl Ground {
     pub fn is_free(&self) -> bool {
         matches!(self, Ground::FreeSpace)
     }
-    /// Gerçek zemin hazır değerleri (ad, εr, σ).
-    pub const PRESETS: [(&'static str, f64, f64); 6] = [
-        ("Deniz suyu", 81.0, 5.0),
-        ("Tatlı su", 80.0, 0.001),
-        ("Çok iyi toprak (verimli ova)", 20.0, 0.0303),
-        ("Ortalama toprak", 13.0, 0.005),
-        ("Zayıf toprak (kayalık, kumlu)", 5.0, 0.001),
-        ("Şehir / sanayi bölgesi", 5.0, 0.001),
-    ];
+    /// Gerçek zemin hazır değerleri (ad, εr, σ), seçili dilde.
+    pub fn presets() -> [(&'static str, f64, f64); 6] {
+                [
+            (crate::i18n::t("Sea water", "Deniz suyu"), 81.0, 5.0),
+            (crate::i18n::t("Fresh water", "Tatlı su"), 80.0, 0.001),
+            (crate::i18n::t("Very good soil (fertile plain)", "Çok iyi toprak (verimli ova)"), 20.0, 0.0303),
+            (crate::i18n::t("Average soil", "Ortalama toprak"), 13.0, 0.005),
+            (crate::i18n::t("Poor soil (rocky, sandy)", "Zayıf toprak (kayalık, kumlu)"), 5.0, 0.001),
+            (crate::i18n::t("City / industrial", "Şehir / sanayi bölgesi"), 5.0, 0.001),
+        ]
+    }
     pub fn label(&self) -> String {
         match self {
-            Ground::FreeSpace => "Serbest uzay".into(),
-            Ground::Perfect => "Kusursuz zemin".into(),
-            Ground::Real { permittivity, conductivity } => format!("Gerçek zemin (εr {permittivity:.0}, σ {conductivity} S/m)"),
+            Ground::FreeSpace => crate::i18n::t("Free space", "Serbest uzay").into(),
+            Ground::Perfect => crate::i18n::t("Perfect ground", "Kusursuz zemin").into(),
+            Ground::Real { permittivity, conductivity } => crate::tf!("Real ground (εr {permittivity:.0}, σ {conductivity} S/m)", "Gerçek zemin (εr {permittivity:.0}, σ {conductivity} S/m)"),
         }
     }
 }
@@ -211,7 +213,7 @@ impl Antenna {
         Self { name: name.into(), frequency, wires, sources, ground: Ground::FreeSpace, loads: Vec::new() }
     }
     pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).expect("anten JSON'a çevrilemedi")
+        serde_json::to_string_pretty(self).expect("failed to serialize antenna to JSON")
     }
     pub fn from_json(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)

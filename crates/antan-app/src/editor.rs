@@ -1,6 +1,9 @@
 //! Sol panel: model ağacı. Sağ panel: özellikler (Yagi tasarımı ya da tel modeli).
 
 use eframe::egui::{self, Color32, RichText};
+use antan_core::i18n::t as tl;
+use antan_core::tf;
+
 
 use antan_core::mechanics::{self, cantilever_tip_sag, tube_props, wind_force};
 use antan_core::templates::{Tube, wire};
@@ -33,9 +36,9 @@ fn mm_value(ui: &mut egui::Ui, v: &mut f64, speed: f64, range: std::ops::RangeIn
 
 fn material_combo(ui: &mut egui::Ui, id: &str, m: &mut Material) -> bool {
     let mut changed = false;
-    egui::ComboBox::from_id_salt(id).selected_text(m.name.clone()).width(180.0).show_ui(ui, |ui| {
+    egui::ComboBox::from_id_salt(id).selected_text(m.display_name().to_string()).width(180.0).show_ui(ui, |ui| {
         for p in Material::presets() {
-            if ui.selectable_label(p.name == m.name, &p.name).clicked() {
+            if ui.selectable_label(p.name == m.name, p.display_name()).clicked() {
                 *m = p;
                 changed = true;
             }
@@ -48,7 +51,7 @@ fn material_combo(ui: &mut egui::Ui, id: &str, m: &mut Material) -> bool {
 fn tube_editor(ui: &mut egui::Ui, d: &mut f64, wall: &mut Option<f64>) -> bool {
     let mut changed = mm_value(ui, d, 0.1, 0.0005..=0.3);
     let mut hollow = wall.is_some();
-    if ui.checkbox(&mut hollow, "boru").on_hover_text("İşaretli değilse içi dolu çubuk").changed() {
+    if ui.checkbox(&mut hollow, tl("tube", "boru")).on_hover_text(tl("Unchecked means a solid rod", "İşaretli değilse içi dolu çubuk")).changed() {
         *wall = if hollow { Some((0.1 * *d).clamp(0.0005, 0.5 * *d)) } else { None };
         changed = true;
     }
@@ -56,7 +59,7 @@ fn tube_editor(ui: &mut egui::Ui, d: &mut f64, wall: &mut Option<f64>) -> bool {
         changed |= mm_value(ui, t, 0.02, 0.0001..=0.15);
         *t = t.min(0.5 * *d);
     } else {
-        ui.weak("dolu");
+        ui.weak(tl("solid", "dolu"));
     }
     changed
 }
@@ -95,21 +98,21 @@ pub fn model_tree(app: &mut AntAnApp, ui: &mut egui::Ui) {
     ui.separator();
     ui.horizontal_wrapped(|ui| match &app.project.model {
         Model::Yagi(_) => {
-            if ui.button("+ Yönlendirici").clicked() {
+            if ui.button(tl("+ Director", "+ Yönlendirici")).clicked() {
                 action = Some(TreeAction::Add);
             }
-            if ui.button("Sil").clicked() {
+            if ui.button(tl("Delete", "Sil")).clicked() {
                 action = Some(TreeAction::Remove);
             }
         }
         Model::Wires(_) => {
-            if ui.button("+ Tel").clicked() {
+            if ui.button(tl("+ Wire", "+ Tel")).clicked() {
                 action = Some(TreeAction::Add);
             }
-            if ui.button("Kopyala").clicked() {
+            if ui.button(tl("Duplicate", "Kopyala")).clicked() {
                 action = Some(TreeAction::Duplicate);
             }
-            if ui.button("Sil").clicked() {
+            if ui.button(tl("Delete", "Sil")).clicked() {
                 action = Some(TreeAction::Remove);
             }
         }
@@ -133,8 +136,8 @@ fn apply_tree_action(app: &mut AntAnApp, a: TreeAction) {
         (Model::Yagi(d), TreeAction::Add) => {
             let last = d.elements.iter().max_by(|a, b| a.x.partial_cmp(&b.x).unwrap()).cloned();
             let (x, len) = last.map(|e| (e.x + 0.22 * lambda, (e.length * 0.99).max(0.40 * lambda))).unwrap_or((0.0, 0.45 * lambda));
-            let n = d.elements.iter().filter(|e| e.name.starts_with("Yönlendirici")).count() + 1;
-            d.elements.push(YagiElement { name: format!("Yönlendirici {n}"), x, length: len });
+            let n = d.elements.iter().filter(|e| e.name.starts_with("Director") || e.name.starts_with("Yönlendirici")).count() + 1;
+            d.elements.push(YagiElement { name: tf!("Director {n}", "Yönlendirici {n}"), x, length: len });
             app.selected = d.elements.len() - 1;
         }
         (Model::Yagi(d), TreeAction::Remove) => {
@@ -145,20 +148,20 @@ fn apply_tree_action(app: &mut AntAnApp, a: TreeAction) {
                 }
                 app.selected = app.selected.min(d.elements.len() - 1);
             } else {
-                app.status = "Sürülen eleman ya da son iki eleman silinemez".into();
+                app.status = tl("The driven element or the last two elements cannot be deleted", "Sürülen eleman ya da son iki eleman silinemez").into();
             }
         }
         (Model::Wires(a), TreeAction::Add) => {
             let (_, hi) = a.bounds();
             let x = if hi[0].is_finite() { hi[0] + 0.2 * lambda } else { 0.0 };
             let tube = a.wires.get(app.selected).map(|w| Tube { diameter: w.diameter, wall: w.wall, material: w.material.clone() }).unwrap_or_else(crate::project::default_tube);
-            a.wires.push(wire(&format!("Tel {}", a.wires.len() + 1), [x, -0.24 * lambda, 0.0], [x, 0.24 * lambda, 0.0], &tube));
+            a.wires.push(wire(&tf!("Wire {}", "Tel {}", a.wires.len() + 1), [x, -0.24 * lambda, 0.0], [x, 0.24 * lambda, 0.0], &tube));
             app.selected = a.wires.len() - 1;
         }
         (Model::Wires(a), TreeAction::Duplicate) => {
             if let Some(w) = a.wires.get(app.selected).cloned() {
                 let mut w2 = w;
-                w2.name = format!("{} (kopya)", w2.name);
+                w2.name = tf!("{} (copy)", "{} (kopya)", w2.name);
                 w2.start[0] += 0.1 * lambda;
                 w2.end[0] += 0.1 * lambda;
                 a.wires.push(w2);
@@ -189,21 +192,21 @@ fn apply_tree_action(app: &mut AntAnApp, a: TreeAction) {
 
 pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
     ui.add_space(4.0);
-    section(ui, "Anten", true, |ui| {
+    section(ui, tl("Antenna", "Anten"), true, |ui| {
         egui::Grid::new("ant").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label("Ad");
+            ui.label(tl("Name", "Ad"));
             ui.add(egui::TextEdit::singleline(app.project.model.name_mut()).desired_width(170.0));
             ui.end_row();
-            ui.label("Frekans");
+            ui.label(tl("Frequency", "Frekans"));
             let mut mhz = app.project.model.frequency() / 1e6;
             if ui.add(egui::DragValue::new(&mut mhz).range(0.1..=30_000.0).speed(0.01).max_decimals(4).suffix(" MHz")).changed() {
                 app.project.model.set_frequency(mhz * 1e6);
             }
             ui.end_row();
-            ui.label("Dalga boyu");
+            ui.label(tl("Wavelength", "Dalga boyu"));
             ui.label(format!("{:.1} mm", C0 / app.project.model.frequency() * MM));
             ui.end_row();
-            ui.label("Hat empedansı Z₀");
+            ui.label(tl("Line impedance Z₀", "Hat empedansı Z₀"));
             ui.add(egui::DragValue::new(&mut app.project.z0).range(1.0..=1000.0).suffix(" Ω"));
             ui.end_row();
         });
@@ -220,7 +223,7 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
     loads_section(app, ui);
     mechanics_section(app, ui);
 
-    section(ui, "Notlar", false, |ui| {
+    section(ui, tl("Notes", "Notlar"), false, |ui| {
         ui.add(egui::TextEdit::multiline(&mut app.project.notes).desired_rows(4).desired_width(f32::INFINITY));
     });
 }
@@ -228,7 +231,7 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
 fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
     use antan_core::geometry::Ground;
     let lambda = C0 / app.project.model.frequency();
-    section(ui, "Zemin ve yükseklik", true, |ui| {
+    section(ui, tl("Ground and height", "Zemin ve yükseklik"), true, |ui| {
         let g = app.project.model.ground_mut();
         let kind = match g {
             Ground::FreeSpace => 0,
@@ -237,9 +240,9 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
         };
         let mut k = kind;
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut k, 0, "Serbest uzay");
-            ui.selectable_value(&mut k, 1, "Kusursuz zemin");
-            ui.selectable_value(&mut k, 2, "Gerçek zemin");
+            ui.selectable_value(&mut k, 0, tl("Free space", "Serbest uzay"));
+            ui.selectable_value(&mut k, 1, tl("Perfect ground", "Kusursuz zemin"));
+            ui.selectable_value(&mut k, 2, tl("Real ground", "Gerçek zemin"));
         });
         if k != kind {
             *g = match k {
@@ -250,10 +253,10 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
         }
         if let Ground::Real { permittivity, conductivity } = g {
             egui::Grid::new("real_ground").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-                ui.label("Hazır");
-                let current = Ground::PRESETS.iter().find(|p| (p.1 - *permittivity).abs() < 1e-9 && (p.2 - *conductivity).abs() < 1e-12).map(|p| p.0).unwrap_or("Özel");
+                ui.label(tl("Preset", "Hazır"));
+                let current = Ground::presets().iter().find(|p| (p.1 - *permittivity).abs() < 1e-9 && (p.2 - *conductivity).abs() < 1e-12).map(|p| p.0).unwrap_or(tl("Custom", "Özel"));
                 egui::ComboBox::from_id_salt("ground_preset").selected_text(current).width(200.0).show_ui(ui, |ui| {
-                    for (name, e, s) in Ground::PRESETS {
+                    for (name, e, s) in Ground::presets() {
                         if ui.selectable_label(current == name, format!("{name}  (εr {e}, σ {s})")).clicked() {
                             *permittivity = e;
                             *conductivity = s;
@@ -261,10 +264,10 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                     }
                 });
                 ui.end_row();
-                ui.label("Dielektrik sabiti εr");
+                ui.label(tl("Dielectric constant εr", "Dielektrik sabiti εr"));
                 ui.add(egui::DragValue::new(permittivity).range(1.0..=100.0).speed(0.1));
                 ui.end_row();
-                ui.label("İletkenlik σ");
+                ui.label(tl("Conductivity σ", "İletkenlik σ"));
                 ui.add(egui::DragValue::new(conductivity).range(0.0..=10.0).speed(0.0005).max_decimals(4).suffix(" S/m"));
                 ui.end_row();
             });
@@ -274,7 +277,7 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
             Model::Yagi(d) => {
                 ui.add_enabled_ui(grounded, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Bum yüksekliği");
+                        ui.label(tl("Boom height", "Bum yüksekliği"));
                         let mut h = d.height;
                         if ui.add(egui::DragValue::new(&mut h).range(0.05..=500.0).speed(0.05).max_decimals(2).suffix(" m")).changed() {
                             d.height = h;
@@ -286,10 +289,10 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
             Model::Wires(a) => {
                 let (lo, hi) = a.bounds();
                 ui.horizontal(|ui| {
-                    ui.label(format!("Yükseklik aralığı: {:.0} … {:.0} mm", lo[2] * MM, hi[2] * MM));
+                    ui.label(tf!("Height range: {:.0} … {:.0} mm", "Yükseklik aralığı: {:.0} … {:.0} mm", lo[2] * MM, hi[2] * MM));
                 });
                 ui.horizontal(|ui| {
-                    ui.label("Tümünü kaydır (z)");
+                    ui.label(tl("Shift all (z)", "Tümünü kaydır (z)"));
                     for (l, dz) in [("−λ/4", -0.25), ("−1 m", -1.0 / lambda), ("+1 m", 1.0 / lambda), ("+λ/4", 0.25)] {
                         if ui.small_button(l).clicked() {
                             for w in &mut a.wires {
@@ -298,7 +301,7 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                             }
                         }
                     }
-                    if ui.small_button("zemine otur").on_hover_text("En alt nokta z = 0 olacak şekilde kaydırır").clicked() {
+                    if ui.small_button(tl("sit on ground", "zemine otur")).on_hover_text(tl("Shifts the model so its lowest point is at z = 0", "En alt nokta z = 0 olacak şekilde kaydırır")).clicked() {
                         for w in &mut a.wires {
                             w.start[2] -= lo[2];
                             w.end[2] -= lo[2];
@@ -309,7 +312,7 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
         }
         if grounded {
             ui.label(
-                RichText::new("Zemin z = 0 düzlemidir. Akımlar kusursuz zemin görüntüsüyle bulunur; gerçek zeminde uzak alan Fresnel katsayılarıyla hesaplanır (MININEC/MMANA yaklaşımı). Toprak kaybı besleme empedansına girmez.")
+                RichText::new(tl("Ground is the z = 0 plane. Currents are solved with a perfect-ground image; over real ground the far field uses Fresnel coefficients (MININEC/MMANA approach). Soil loss does not enter the feed impedance.", "Zemin z = 0 düzlemidir. Akımlar kusursuz zemin görüntüsüyle bulunur; gerçek zeminde uzak alan Fresnel katsayılarıyla hesaplanır (MININEC/MMANA yaklaşımı). Toprak kaybı besleme empedansına girmez."))
                     .small()
                     .color(theme::TEXT_DIM),
             );
@@ -319,14 +322,14 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
 
 fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
     let lambda = C0 / d.frequency;
-    section(ui, "Elemanlar", true, |ui| {
+    section(ui, tl("Elements", "Elemanlar"), true, |ui| {
         let mut remove = None;
         egui::Grid::new("elements").num_columns(6).striped(true).spacing([6.0, 4.0]).show(ui, |ui| {
-            ui.label(RichText::new("Bes.").small()).on_hover_text("Sürülen (beslenen) eleman");
-            ui.label(RichText::new("Ad").small());
-            ui.label(RichText::new("Bum konumu").small());
-            ui.label(RichText::new("Elektriksel boy").small()).on_hover_text("Çözücünün kullandığı, bum etkisi olmayan boy");
-            ui.label(RichText::new("Kesim boyu").small()).on_hover_text("Elektriksel boy + bum düzeltmesi");
+            ui.label(RichText::new(tl("Feed", "Bes.")).small()).on_hover_text(tl("Driven (fed) element", "Sürülen (beslenen) eleman"));
+            ui.label(RichText::new(tl("Name", "Ad")).small());
+            ui.label(RichText::new(tl("Boom position", "Bum konumu")).small());
+            ui.label(RichText::new(tl("Electrical length", "Elektriksel boy")).small()).on_hover_text(tl("Length used by the solver, without boom effect", "Çözücünün kullandığı, bum etkisi olmayan boy"));
+            ui.label(RichText::new(tl("Cut length", "Kesim boyu")).small()).on_hover_text(tl("Electrical length + boom correction", "Elektriksel boy + bum düzeltmesi"));
             ui.label("");
             ui.end_row();
             for i in 0..d.elements.len() {
@@ -343,8 +346,8 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
                     ui.label(RichText::new(format!("{:.3}λ", e.length / lambda)).small().color(theme::TEXT_DIM));
                 });
                 ui.label(RichText::new(format!("{:.1}", (e.length + corr) * MM)).color(if corr > 0.0 { theme::WARM } else { Color32::WHITE }))
-                    .on_hover_text(format!("Bum düzeltmesi: +{:.2} mm", corr * MM));
-                if ui.small_button("🗑").on_hover_text("Elemanı sil").clicked() {
+                    .on_hover_text(tf!("Boom correction: +{:.2} mm", "Bum düzeltmesi: +{:.2} mm", corr * MM));
+                if ui.small_button("🗑").on_hover_text(tl("Delete element", "Elemanı sil")).clicked() {
                     remove = Some(i);
                 }
                 ui.end_row();
@@ -360,17 +363,17 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
             }
         }
         ui.horizontal(|ui| {
-            if ui.button("Konuma göre sırala").clicked() {
+            if ui.button(tl("Sort by position", "Konuma göre sırala")).clicked() {
                 d.sort();
             }
-            ui.label(RichText::new(format!("Bum: {:.0} mm ({:.2} λ)", d.boom_length() * MM, d.boom_length() / lambda)).color(theme::TEXT_DIM));
+            ui.label(RichText::new(tf!("Boom: {:.0} mm ({:.2} λ)", "Bum: {:.0} mm ({:.2} λ)", d.boom_length() * MM, d.boom_length() / lambda)).color(theme::TEXT_DIM));
         });
     });
 
-    section(ui, "Boru profili (kademeli eleman)", true, |ui| {
-        ui.label(RichText::new("Ortadan uca doğru bölümler; her bölüm bir taraftaki uzunluktur. Kalan kısım uç borusudur. Tüm elemanlarda aynı profil kullanılır.").small().color(theme::TEXT_DIM));
+    section(ui, tl("Tube profile (tapered element)", "Boru profili (kademeli eleman)"), true, |ui| {
+        ui.label(RichText::new(tl("Sections from the center outwards; each length is per side. The remainder is the tip tube. All elements share the same profile.", "Ortadan uca doğru bölümler; her bölüm bir taraftaki uzunluktur. Kalan kısım uç borusudur. Tüm elemanlarda aynı profil kullanılır.")).small().color(theme::TEXT_DIM));
         ui.horizontal(|ui| {
-            ui.label("Malzeme");
+            ui.label(tl("Material", "Malzeme"));
             let mut m = d.profile.tip.material.clone();
             if material_combo(ui, "yagi_mat", &mut m) {
                 d.profile.tip.material = m.clone();
@@ -381,9 +384,9 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
         });
         let mut remove = None;
         egui::Grid::new("profile").num_columns(4).striped(true).spacing([6.0, 4.0]).show(ui, |ui| {
-            ui.label(RichText::new("Bölüm").small());
-            ui.label(RichText::new("Uzunluk").small());
-            ui.label(RichText::new("Dış çap / yapı / et").small());
+            ui.label(RichText::new(tl("Section", "Bölüm")).small());
+            ui.label(RichText::new(tl("Length", "Uzunluk")).small());
+            ui.label(RichText::new(tl("Outer diameter / type / wall", "Dış çap / yapı / et")).small());
             ui.label("");
             ui.end_row();
             for (k, s) in d.profile.sections.iter_mut().enumerate() {
@@ -395,8 +398,8 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
                 }
                 ui.end_row();
             }
-            ui.label("Uç");
-            ui.label(RichText::new("kalan").color(theme::TEXT_DIM));
+            ui.label(tl("Tip", "Uç"));
+            ui.label(RichText::new(tl("rest", "kalan")).color(theme::TEXT_DIM));
             ui.horizontal(|ui| tube_editor(ui, &mut d.profile.tip.diameter, &mut d.profile.tip.wall));
             ui.label("");
             ui.end_row();
@@ -404,7 +407,7 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
         if let Some(k) = remove {
             d.profile.sections.remove(k);
         }
-        if ui.button("+ İç bölüm ekle").on_hover_text("Ortaya daha kalın bir boru bölümü ekler").clicked() {
+        if ui.button(tl("+ Add inner section", "+ İç bölüm ekle")).on_hover_text(tl("Adds a thicker tube section at the center", "Ortaya daha kalın bir boru bölümü ekler")).clicked() {
             let tip = d.profile.tip.clone();
             let base = d.profile.sections.last().map(|s| s.tube.clone()).unwrap_or(tip);
             let tube = Tube { diameter: base.diameter + 0.002, ..base };
@@ -485,7 +488,7 @@ fn load_kind_editor(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debu
     if let LoadKind::SeriesRlc { c, .. } = k
         && *c == 0.0
     {
-        ui.label(RichText::new("C = 0: kondansatör yok (kısa devre).").small().color(theme::TEXT_DIM));
+        ui.label(RichText::new(tl("C = 0: no capacitor (short circuit).", "C = 0: kondansatör yok (kısa devre).")).small().color(theme::TEXT_DIM));
     }
     changed
 }
@@ -493,8 +496,8 @@ fn load_kind_editor(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debu
 fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
     let f = app.project.model.frequency();
     let title = match app.project.model {
-        Model::Yagi(_) => "Eleman yüklemeleri (bobin, tuzak)",
-        Model::Wires(_) => "Yüklemeler (bobin, kondansatör, tuzak)",
+        Model::Yagi(_) => tl("Element loads (coil, trap)", "Eleman yüklemeleri (bobin, tuzak)"),
+        Model::Wires(_) => tl("Loads (coil, capacitor, trap)", "Yüklemeler (bobin, kondansatör, tuzak)"),
     };
     let mut tune: Option<usize> = None;
     section(ui, title, false, |ui| {
@@ -505,7 +508,7 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                 for (i, ld) in d.loads.iter_mut().enumerate() {
                     egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(format!("Yük {}", i + 1)).strong());
+                            ui.label(RichText::new(tf!("Load {}", "Yük {}", i + 1)).strong());
                             egui::ComboBox::from_id_salt(("yl_el", i)).selected_text(names.get(ld.element).cloned().unwrap_or_default()).show_ui(ui, |ui| {
                                 for (k, n) in names.iter().enumerate() {
                                     ui.selectable_value(&mut ld.element, k, n);
@@ -516,15 +519,15 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                             }
                         });
                         ui.horizontal(|ui| {
-                            ui.label("Konum (ortadan uca)");
+                            ui.label(tl("Position (center to tip)", "Konum (ortadan uca)"));
                             ui.add(egui::Slider::new(&mut ld.position, 0.0..=1.0).max_decimals(3));
                         });
-                        ui.label(RichText::new(if ld.position < 1e-9 { "Ortada tek yük (sürülen elemanda beslemeyle seri)." } else { "İki kolda simetrik birer yük." }).small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new(if ld.position < 1e-9 { tl("Single load at the center (in series with the feed on the driven element).", "Ortada tek yük (sürülen elemanda beslemeyle seri).") } else { tl("One symmetric load on each arm.", "İki kolda simetrik birer yük.") }).small().color(theme::TEXT_DIM));
                         load_kind_editor(ui, ("y", i), &mut ld.kind);
                         let z = ld.kind.impedance(f);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(format!("Z({:.3} MHz) = {}", f / 1e6, crate::viz::fmt_z(z))).color(theme::ACCENT));
-                            if antan_core::loading::inductance(&ld.kind).is_some() && ui.small_button("L'yi rezonansa ayarla").clicked() {
+                            if antan_core::loading::inductance(&ld.kind).is_some() && ui.small_button(tl("Tune L to resonance", "L'yi rezonansa ayarla")).clicked() {
                                 tune = Some(i);
                             }
                         });
@@ -533,7 +536,7 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                 if let Some(i) = remove {
                     d.loads.remove(i);
                 }
-                if ui.button("+ Yük ekle").clicked() {
+                if ui.button(tl("+ Add load", "+ Yük ekle")).clicked() {
                     d.loads.push(ElementLoad { element: d.driven, position: 0.5, kind: LoadKind::SeriesRlc { r: 0.0, l: 2e-6, c: 0.0 } });
                 }
             }
@@ -542,7 +545,7 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                 for (i, ld) in a.loads.iter_mut().enumerate() {
                     egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(format!("Yük {}", i + 1)).strong());
+                            ui.label(RichText::new(tf!("Load {}", "Yük {}", i + 1)).strong());
                             egui::ComboBox::from_id_salt(("wl_w", i)).selected_text(names.get(ld.wire).cloned().unwrap_or_default()).show_ui(ui, |ui| {
                                 for (k, n) in names.iter().enumerate() {
                                     ui.selectable_value(&mut ld.wire, k, n);
@@ -553,9 +556,9 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                             }
                         });
                         ui.horizontal(|ui| {
-                            ui.label("Konum");
+                            ui.label(tl("Position", "Konum"));
                             ui.add(egui::Slider::new(&mut ld.position, 0.0..=1.0).max_decimals(3));
-                            if ui.small_button("orta").clicked() {
+                            if ui.small_button(tl("center", "orta")).clicked() {
                                 ld.position = 0.5;
                             }
                         });
@@ -563,7 +566,7 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                         let z = ld.kind.impedance(f);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(format!("Z({:.3} MHz) = {}", f / 1e6, crate::viz::fmt_z(z))).color(theme::ACCENT));
-                            if antan_core::loading::inductance(&ld.kind).is_some() && ui.small_button("L'yi rezonansa ayarla").clicked() {
+                            if antan_core::loading::inductance(&ld.kind).is_some() && ui.small_button(tl("Tune L to resonance", "L'yi rezonansa ayarla")).clicked() {
                                 tune = Some(i);
                             }
                         });
@@ -572,14 +575,14 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                 if let Some(i) = remove {
                     a.loads.remove(i);
                 }
-                if ui.button("+ Yük ekle").clicked() {
+                if ui.button(tl("+ Add load", "+ Yük ekle")).clicked() {
                     let w = app.selected.min(a.wires.len().saturating_sub(1));
                     a.loads.push(Load { wire: w, position: 0.5, kind: LoadKind::SeriesRlc { r: 0.0, l: 2e-6, c: 0.0 } });
                 }
             }
         }
         ui.label(
-            RichText::new("Yük, en yakın düğüme seri empedans olarak girer (NEC LD kartları gibi). Uca konan yük o uç başka tek bir telle birleşiyorsa geçerlidir. Bobin kaybı için seri R ya da tuzakta Q kullanın; kayıp verime yansır.")
+            RichText::new(tl("A load is inserted as a series impedance at the nearest node (like NEC LD cards). A load at a wire end is valid only if that end joins exactly one other wire. Use series R or a trap's Q for coil loss; the loss shows up in the efficiency.", "Yük, en yakın düğüme seri empedans olarak girer (NEC LD kartları gibi). Uca konan yük o uç başka tek bir telle birleşiyorsa geçerlidir. Bobin kaybı için seri R ya da tuzakta Q kullanın; kayıp verime yansır."))
                 .small()
                 .color(theme::TEXT_DIM),
         );
@@ -612,9 +615,9 @@ fn tune_load(app: &mut AntAnApp, i: usize) {
                 Model::Wires(a) => set_inductance(&mut a.loads[i].kind, l),
                 Model::Yagi(d) => set_inductance(&mut d.loads[i].kind, l),
             }
-            app.status = format!("Yük {}: L = {:.3} µH, Z = {}", i + 1, l * 1e6, crate::viz::fmt_z(z));
+            app.status = tf!("Load {}: L = {:.3} µH, Z = {}", "Yük {}: L = {:.3} µH, Z = {}", i + 1, l * 1e6, crate::viz::fmt_z(z));
         }
-        None => app.status = format!("Yük {} ayarlanamadı (yakınsamadı ya da çözüm yok)", i + 1),
+        None => app.status = tf!("Load {} could not be tuned (no convergence or no solution)", "Yük {} ayarlanamadı (yakınsamadı ya da çözüm yok)", i + 1),
     }
 }
 
@@ -625,13 +628,13 @@ fn mount_combo(ui: &mut egui::Ui, id: &str, m: &mut BoomMount) {
                 *m = opt;
             }
         }
-        if ui.selectable_label(matches!(m, BoomMount::Custom(_)), "Kullanıcı tanımlı (ör. bum üstünde)").clicked() && !matches!(m, BoomMount::Custom(_)) {
+        if ui.selectable_label(matches!(m, BoomMount::Custom(_)), tl("User defined (e.g. above the boom)", "Kullanıcı tanımlı (ör. bum üstünde)")).clicked() && !matches!(m, BoomMount::Custom(_)) {
             *m = BoomMount::Custom(0.0);
         }
     });
     if let BoomMount::Custom(v) = m {
         ui.horizontal(|ui| {
-            ui.label("  ek boy");
+            ui.label(tl("  extra length", "  ek boy"));
             mm_value(ui, v, 0.05, -0.1..=0.1);
         });
     }
@@ -640,43 +643,43 @@ fn mount_combo(ui: &mut egui::Ui, id: &str, m: &mut BoomMount) {
 fn boom_section(ui: &mut egui::Ui, d: &mut YagiDesign) {
     let f = d.frequency;
     let lambda = C0 / f;
-    section(ui, "Bum ve bum düzeltmesi", true, |ui| {
+    section(ui, tl("Boom and boom correction", "Bum ve bum düzeltmesi"), true, |ui| {
         egui::Grid::new("boom").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label(if d.boom.square { "Kenar" } else { "Dış çap" });
+            ui.label(if d.boom.square { tl("Side", "Kenar") } else { tl("Outer diameter", "Dış çap") });
             ui.horizontal(|ui| {
                 mm_value(ui, &mut d.boom.diameter, 0.2, 0.005..=0.3);
-                ui.checkbox(&mut d.boom.square, "kare profil");
+                ui.checkbox(&mut d.boom.square, tl("square tube", "kare profil"));
                 ui.label(RichText::new(format!("{:.4} λ", d.boom.diameter / lambda)).small().color(theme::TEXT_DIM));
             });
             ui.end_row();
-            ui.label("Et kalınlığı");
+            ui.label(tl("Wall thickness", "Et kalınlığı"));
             mm_value(ui, &mut d.boom.wall, 0.05, 0.0005..=0.02);
             ui.end_row();
-            ui.label("Malzeme");
+            ui.label(tl("Material", "Malzeme"));
             material_combo(ui, "boom_mat", &mut d.boom.material);
             ui.end_row();
-            ui.label("Parazitik elemanlar");
+            ui.label(tl("Parasitic elements", "Parazitik elemanlar"));
             ui.vertical(|ui| mount_combo(ui, "mount_par", &mut d.boom.mount));
             ui.end_row();
-            ui.label("Sürülen eleman");
+            ui.label(tl("Driven element", "Sürülen eleman"));
             ui.vertical(|ui| mount_combo(ui, "mount_drv", &mut d.boom.driven_mount));
             ui.end_row();
-            ui.label("Uç taşması (her uç)");
+            ui.label(tl("Overhang (each end)", "Uç taşması (her uç)"));
             mm_value(ui, &mut d.boom.overhang, 1.0, 0.0..=2.0);
             ui.end_row();
-            ui.label("Geçme payı");
+            ui.label(tl("Telescoping overlap", "Geçme payı"));
             mm_value(ui, &mut d.boom.overlap, 1.0, 0.0..=0.3);
             ui.end_row();
         });
         let cp = d.boom.correction(d.boom.mount, f);
         let cd = d.boom.correction(d.boom.driven_mount, f);
-        ui.label(RichText::new(format!("Düzeltme: parazitik +{:.2} mm, sürülen +{:.2} mm · bum boyu {:.0} mm", cp * MM, cd * MM, d.boom_total_length() * MM)).strong());
+        ui.label(RichText::new(tf!("Correction: parasitic +{:.2} mm, driven +{:.2} mm · boom length {:.0} mm", "Düzeltme: parazitik +{:.2} mm, sürülen +{:.2} mm · bum boyu {:.0} mm", cp * MM, cd * MM, d.boom_total_length() * MM)).strong());
         if !d.boom.in_range(f) {
-            ui.label(RichText::new(format!("Uyarı: bum çapı {:.3} λ, DL6WU ölçümlerinin geçerli olduğu 0.055 λ'yı aşıyor.", d.boom.diameter / lambda)).color(theme::BAD));
+            ui.label(RichText::new(tf!("Warning: boom diameter {:.3} λ exceeds the 0.055 λ range of the DL6WU measurements.", "Uyarı: bum çapı {:.3} λ, DL6WU ölçümlerinin geçerli olduğu 0.055 λ'yı aşıyor.", d.boom.diameter / lambda)).color(theme::BAD));
         }
         ui.label(
             RichText::new(
-                "Metal bum, içinden geçen elemanı elektriksel olarak kısaltır. Formül: G3SEK'in DL6WU ölçümlerine uydurduğu C = 25.195·B − 229·B² (B: bum çapı/λ, C: bum çapının kesri), yalıtılmış geçişte yarısı. Tasarımdaki boylar elektriksel boydur; kesim boyu düzeltme eklenmiş halidir. Bum üstüne yalıtkanla monte elemanlar için yayımlanmış formül yok; düzeltme küçüktür ve yükseklikle azalır — kullanıcı tanımlı değer girin.",
+                tl("A metal boom electrically shortens an element passing through it. Formula: G3SEK's fit to DL6WU's measurements, C = 25.195·B − 229·B² (B: boom diameter/λ, C: fraction of boom diameter), half of that for insulated through-boom elements. Design lengths are electrical lengths; the cut length includes the correction. No published formula exists for elements insulated above the boom; the correction is small and decreases with height — enter a user-defined value.", "Metal bum, içinden geçen elemanı elektriksel olarak kısaltır. Formül: G3SEK'in DL6WU ölçümlerine uydurduğu C = 25.195·B − 229·B² (B: bum çapı/λ, C: bum çapının kesri), yalıtılmış geçişte yarısı. Tasarımdaki boylar elektriksel boydur; kesim boyu düzeltme eklenmiş halidir. Bum üstüne yalıtkanla monte elemanlar için yayımlanmış formül yok; düzeltme küçüktür ve yükseklikle azalır — kullanıcı tanımlı değer girin."),
             )
             .small()
             .color(theme::TEXT_DIM),
@@ -686,23 +689,23 @@ fn boom_section(ui: &mut egui::Ui, d: &mut YagiDesign) {
 
 /// Kesim listesini düz metin olarak üretir (panoya kopyalamak için).
 pub fn cut_list_text(d: &YagiDesign) -> String {
-    let mut s = format!("{} — kesim listesi ({:.3} MHz)\n", d.name, d.frequency / 1e6);
-    s += &format!("Bum: Ø{:.1} mm, boy {:.0} mm\n\n", d.boom.diameter * MM, d.boom_total_length() * MM);
+    let mut s = tf!("{} — cut list ({:.3} MHz)\n", "{} — kesim listesi ({:.3} MHz)\n", d.name, d.frequency / 1e6);
+    s += &tf!("Boom: Ø{:.1} mm, length {:.0} mm\n\n", "Bum: Ø{:.1} mm, boy {:.0} mm\n\n", d.boom.diameter * MM, d.boom_total_length() * MM);
     for (i, e) in d.elements.iter().enumerate() {
-        s += &format!("{}  (konum {:.1} mm, kesim boyu {:.1} mm)\n", e.name, e.x * MM, d.cut_length(i) * MM);
+        s += &tf!("{}  (position {:.1} mm, cut length {:.1} mm)\n", "{}  (konum {:.1} mm, kesim boyu {:.1} mm)\n", e.name, e.x * MM, d.cut_length(i) * MM);
         for p in d.cut_list(i) {
-            s += &format!("    {} × {:>8.1} mm  Ø{:.1}{}  {}\n", p.count, p.length * MM, p.tube.diameter * MM, p.tube.wall.map(|w| format!("×{:.1}", w * MM)).unwrap_or_else(|| " dolu".into()), p.label);
+            s += &format!("    {} × {:>8.1} mm  Ø{:.1}{}  {}\n", p.count, p.length * MM, p.tube.diameter * MM, p.tube.wall.map(|w| format!("×{:.1}", w * MM)).unwrap_or_else(|| tl(" solid", " dolu").into()), p.label);
         }
     }
     s
 }
 
 fn cut_list_section(ui: &mut egui::Ui, d: &YagiDesign) {
-    section(ui, "Kesim listesi", false, |ui| {
+    section(ui, tl("Cut list", "Kesim listesi"), false, |ui| {
         // Boru türüne göre toplam boy (alışveriş listesi).
         let mut totals: Vec<(String, f64)> = Vec::new();
         egui::Grid::new("cuts").num_columns(4).striped(true).spacing([10.0, 2.0]).show(ui, |ui| {
-            for h in ["Eleman / parça", "Adet", "Kesim", "Boru"] {
+            for h in [tl("Element / piece", "Eleman / parça"), tl("Qty", "Adet"), tl("Cut", "Kesim"), tl("Tube", "Boru")] {
                 ui.label(RichText::new(h).small().color(theme::TEXT_DIM));
             }
             ui.end_row();
@@ -713,7 +716,7 @@ fn cut_list_section(ui: &mut egui::Ui, d: &YagiDesign) {
                 ui.label("");
                 ui.end_row();
                 for p in d.cut_list(i) {
-                    let tube = format!("Ø{:.1}{}", p.tube.diameter * MM, p.tube.wall.map(|w| format!(" × {:.1}", w * MM)).unwrap_or_else(|| " dolu".into()));
+                    let tube = format!("Ø{:.1}{}", p.tube.diameter * MM, p.tube.wall.map(|w| format!(" × {:.1}", w * MM)).unwrap_or_else(|| tl(" solid", " dolu").into()));
                     ui.label(format!("   {}", p.label));
                     ui.label(format!("{}", p.count));
                     ui.label(format!("{:.1} mm", p.length * MM));
@@ -727,12 +730,12 @@ fn cut_list_section(ui: &mut egui::Ui, d: &YagiDesign) {
             }
         });
         ui.separator();
-        ui.label(RichText::new("Toplam boru ihtiyacı (fire hariç)").strong());
+        ui.label(RichText::new(tl("Total tubing needed (excluding waste)", "Toplam boru ihtiyacı (fire hariç)")).strong());
         for (t, l) in &totals {
             ui.label(format!("  {t}: {:.2} m", l));
         }
-        ui.label(format!("  Bum Ø{:.1} × {:.1}: {:.2} m", d.boom.diameter * MM, d.boom.wall * MM, d.boom_total_length()));
-        if ui.button("📋 Kesim listesini panoya kopyala").clicked() {
+        ui.label(tf!("  Boom Ø{:.1} × {:.1}: {:.2} m", "  Bum Ø{:.1} × {:.1}: {:.2} m", d.boom.diameter * MM, d.boom.wall * MM, d.boom_total_length()));
+        if ui.button(tl("📋 Copy cut list to clipboard", "📋 Kesim listesini panoya kopyala")).clicked() {
             ui.ctx().copy_text(cut_list_text(d));
         }
     });
@@ -741,17 +744,17 @@ fn cut_list_section(ui: &mut egui::Ui, d: &YagiDesign) {
 fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
     let lambda = C0 / a.frequency;
     if a.wires.is_empty() {
-        ui.weak("Tel yok.");
+        ui.weak(tl("No wires.", "Tel yok."));
         return;
     }
     let sel = selected.min(a.wires.len() - 1);
-    section(ui, "Seçili tel", true, |ui| {
+    section(ui, tl("Selected wire", "Seçili tel"), true, |ui| {
         let w = &mut a.wires[sel];
         egui::Grid::new("wire").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label("Ad");
+            ui.label(tl("Name", "Ad"));
             ui.add(egui::TextEdit::singleline(&mut w.name).desired_width(170.0));
             ui.end_row();
-            for (label, p) in [("Başlangıç", &mut w.start), ("Bitiş", &mut w.end)] {
+            for (label, p) in [(tl("Start", "Başlangıç"), &mut w.start), (tl("End", "Bitiş"), &mut w.end)] {
                 ui.label(label);
                 ui.horizontal(|ui| {
                     for (axis, c) in ["x", "y", "z"].iter().zip(p.iter_mut()) {
@@ -764,19 +767,19 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
                 });
                 ui.end_row();
             }
-            ui.label("Uzunluk");
+            ui.label(tl("Length", "Uzunluk"));
             ui.label(format!("{:.1} mm ({:.3} λ)", w.length() * MM, w.length() / lambda));
             ui.end_row();
-            ui.label("Dış çap");
+            ui.label(tl("Outer diameter", "Dış çap"));
             ui.horizontal(|ui| tube_editor(ui, &mut w.diameter, &mut w.wall));
             ui.end_row();
-            ui.label("Malzeme");
+            ui.label(tl("Material", "Malzeme"));
             material_combo(ui, "wire_mat", &mut w.material);
             ui.end_row();
-            ui.label("Parça sayısı");
+            ui.label(tl("Segments", "Parça sayısı"));
             ui.horizontal(|ui| {
                 let mut auto = w.segments == 0;
-                if ui.checkbox(&mut auto, "otomatik").changed() {
+                if ui.checkbox(&mut auto, tl("auto", "otomatik")).changed() {
                     w.segments = if auto { 0 } else { w.segment_count(lambda) };
                 }
                 if !auto {
@@ -788,7 +791,7 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
             ui.end_row();
         });
         ui.horizontal(|ui| {
-            if ui.button("Tüm tellere uygula: çap/malzeme").clicked() {
+            if ui.button(tl("Apply diameter/material to all wires", "Tüm tellere uygula: çap/malzeme")).clicked() {
                 let (d, t, m) = (a.wires[sel].diameter, a.wires[sel].wall, a.wires[sel].material.clone());
                 for w in &mut a.wires {
                     w.diameter = d;
@@ -799,24 +802,24 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
         });
     });
 
-    section(ui, "Besleme", true, |ui| {
+    section(ui, tl("Feed", "Besleme"), true, |ui| {
         if a.sources.is_empty() {
             a.sources.push(antan_core::templates::source(0, 0.5));
         }
         let names: Vec<String> = a.wires.iter().map(|w| w.name.clone()).collect();
         let s = &mut a.sources[0];
         egui::Grid::new("feed").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
-            ui.label("Tel");
+            ui.label(tl("Wire", "Tel"));
             egui::ComboBox::from_id_salt("feed_wire").selected_text(names.get(s.wire).cloned().unwrap_or_default()).show_ui(ui, |ui| {
                 for (i, n) in names.iter().enumerate() {
                     ui.selectable_value(&mut s.wire, i, n);
                 }
             });
             ui.end_row();
-            ui.label("Konum");
+            ui.label(tl("Position", "Konum"));
             ui.horizontal(|ui| {
                 ui.add(egui::Slider::new(&mut s.position, 0.0..=1.0).max_decimals(3));
-                for (l, v) in [("baş", 0.0), ("orta", 0.5), ("son", 1.0)] {
+                for (l, v) in [(tl("start", "baş"), 0.0), (tl("center", "orta"), 0.5), (tl("end", "son"), 1.0)] {
                     if ui.small_button(l).clicked() {
                         s.position = v;
                     }
@@ -824,8 +827,8 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
             });
             ui.end_row();
         });
-        ui.label(RichText::new("Uçtan besleme yalnız başka tellerle birleşen uçlarda geçerlidir (ör. ters V tepesi, GP tabanı).").small().color(theme::TEXT_DIM));
-        if ui.button("Beslemeyi seçili tele taşı (orta)").clicked() {
+        ui.label(RichText::new(tl("End feeding is valid only at ends joined to other wires or to ground (e.g. inverted-V apex, GP base).", "Uçtan besleme yalnız başka tellerle birleşen uçlarda geçerlidir (ör. ters V tepesi, GP tabanı).")).small().color(theme::TEXT_DIM));
+        if ui.button(tl("Move feed to the selected wire (center)", "Beslemeyi seçili tele taşı (orta)")).clicked() {
             s.wire = sel;
             s.position = 0.5;
         }
@@ -833,19 +836,19 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
 }
 
 fn mechanics_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
-    section(ui, "Mekanik", false, |ui| {
+    section(ui, tl("Mechanics", "Mekanik"), false, |ui| {
         ui.horizontal(|ui| {
-            ui.label("Rüzgâr hızı");
+            ui.label(tl("Wind speed", "Rüzgâr hızı"));
             ui.add(egui::DragValue::new(&mut app.project.wind_speed).range(0.0..=80.0).suffix(" m/s"));
-            ui.label(RichText::new(format!("({:.0} km/sa)", app.project.wind_speed * 3.6)).color(theme::TEXT_DIM));
+            ui.label(RichText::new(tf!("({:.0} km/h)", "({:.0} km/sa)", app.project.wind_speed * 3.6)).color(theme::TEXT_DIM));
         });
         let v = app.project.wind_speed;
         let (mut total_mass, mut total_area) = (0.0, 0.0);
         egui::Grid::new("mech").num_columns(4).striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
-            ui.label(RichText::new("Eleman").small());
-            ui.label(RichText::new("Kütle").small());
-            ui.label(RichText::new("Uç sarkması").small());
-            ui.label(RichText::new("Rüzgâr").small());
+            ui.label(RichText::new(tl("Element", "Eleman")).small());
+            ui.label(RichText::new(tl("Mass", "Kütle")).small());
+            ui.label(RichText::new(tl("Tip sag", "Uç sarkması")).small());
+            ui.label(RichText::new(tl("Wind", "Rüzgâr")).small());
             ui.end_row();
             match &app.project.model {
                 Model::Yagi(d) => {
@@ -873,7 +876,7 @@ fn mechanics_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                     let (bm, ba) = d.boom.mass_and_area(d.boom_total_length());
                     total_mass += bm;
                     total_area += ba;
-                    ui.label(RichText::new("Bum").strong());
+                    ui.label(RichText::new(tl("Boom", "Bum")).strong());
                     ui.label(format!("{:.0} g", bm * 1000.0));
                     ui.label(RichText::new("—").color(theme::TEXT_DIM));
                     ui.label(format!("{:.1} N", wind_force(ba, v)));
@@ -894,7 +897,7 @@ fn mechanics_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
             }
         });
         ui.separator();
-        ui.label(RichText::new(format!("Toplam eleman kütlesi: {:.2} kg · Rüzgâr alanı: {:.3} m² · Kuvvet: {:.0} N", total_mass, total_area, wind_force(total_area, v))).strong());
-        ui.label(RichText::new("Sarkma: ortadan tutulan elemanın kendi ağırlığıyla ucunun inişi (kademeli kiriş). Bum ve kelepçeler dahil değildir.").small().color(theme::TEXT_DIM));
+        ui.label(RichText::new(tf!("Total mass: {:.2} kg · Wind area: {:.3} m² · Force: {:.0} N", "Toplam eleman kütlesi: {:.2} kg · Rüzgâr alanı: {:.3} m² · Kuvvet: {:.0} N", total_mass, total_area, wind_force(total_area, v))).strong());
+        ui.label(RichText::new(tl("Sag: tip deflection of a center-supported element under its own weight (stepped beam). Boom and clamps are not included.", "Sarkma: ortadan tutulan elemanın kendi ağırlığıyla ucunun inişi (kademeli kiriş). Bum ve kelepçeler dahil değildir.")).small().color(theme::TEXT_DIM));
     });
 }

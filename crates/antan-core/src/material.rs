@@ -33,22 +33,22 @@ impl Material {
         Self { name: name.into(), conductivity, density, youngs_modulus }
     }
     pub fn aluminum_6063() -> Self {
-        Self::new("Alüminyum 6063-T6", 3.0e7, 2700.0, 69.0e9)
+        Self::new("Aluminum 6063-T6", 3.0e7, 2700.0, 69.0e9)
     }
     pub fn aluminum_6061() -> Self {
-        Self::new("Alüminyum 6061-T6", 2.5e7, 2700.0, 69.0e9)
+        Self::new("Aluminum 6061-T6", 2.5e7, 2700.0, 69.0e9)
     }
     pub fn copper() -> Self {
-        Self::new("Bakır", 5.8e7, 8960.0, 117.0e9)
+        Self::new("Copper", 5.8e7, 8960.0, 117.0e9)
     }
     pub fn brass() -> Self {
-        Self::new("Pirinç", 1.5e7, 8500.0, 100.0e9)
+        Self::new("Brass", 1.5e7, 8500.0, 100.0e9)
     }
     pub fn stainless_304() -> Self {
-        Self::new("Paslanmaz çelik 304", 1.4e6, 8000.0, 193.0e9)
+        Self::new("Stainless steel 304", 1.4e6, 8000.0, 193.0e9)
     }
     pub fn perfect() -> Self {
-        Self::new("Kayıpsız iletken", f64::INFINITY, 2700.0, 69.0e9)
+        Self::new("Perfect conductor", f64::INFINITY, 2700.0, 69.0e9)
     }
     /// Arayüzde seçilebilen hazır malzemeler.
     pub fn presets() -> Vec<Material> {
@@ -60,6 +60,23 @@ impl Material {
             Self::stainless_304(),
             Self::perfect(),
         ]
+    }
+
+    /// Seçili dildeki görünen ad. Dosyada ad İngilizce saklanır; bilinmeyen
+    /// (kullanıcı ya da eski dosya) adları olduğu gibi gösterilir.
+    pub fn display_name(&self) -> &str {
+        if !crate::i18n::is_tr() {
+            return &self.name;
+        }
+        match self.name.as_str() {
+            "Aluminum 6063-T6" => "Alüminyum 6063-T6",
+            "Aluminum 6061-T6" => "Alüminyum 6061-T6",
+            "Copper" => "Bakır",
+            "Brass" => "Pirinç",
+            "Stainless steel 304" => "Paslanmaz çelik 304",
+            "Perfect conductor" => "Kayıpsız iletken",
+            other => other,
+        }
     }
 
     /// Deri kalınlığı (m).

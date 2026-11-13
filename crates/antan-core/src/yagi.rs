@@ -95,16 +95,16 @@ impl YagiDesign {
         let lambda = C0 / frequency;
         let n = n.max(2);
         let mut elements = vec![
-            YagiElement { name: "Yansıtıcı".into(), x: 0.0, length: 0.495 * lambda },
-            YagiElement { name: "Sürülen".into(), x: 0.18 * lambda, length: 0.468 * lambda },
+            YagiElement { name: crate::i18n::t("Reflector", "Yansıtıcı").into(), x: 0.0, length: 0.495 * lambda },
+            YagiElement { name: crate::i18n::t("Driven", "Sürülen").into(), x: 0.18 * lambda, length: 0.468 * lambda },
         ];
         let mut x = 0.18;
         for d in 0..n - 2 {
             x += if d == 0 { 0.12 } else { (0.20 + 0.03 * d as f64).min(0.32) };
             let len = (0.445 - 0.006 * d as f64).max(0.40);
-            elements.push(YagiElement { name: format!("Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
+            elements.push(YagiElement { name: crate::tf!("Director {}", "Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
         }
-        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default(), loads: Vec::new() }
+        Self { name: crate::tf!("{n}-element Yagi", "{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default(), loads: Vec::new() }
     }
 
     pub fn boom_length(&self) -> f64 {
@@ -129,8 +129,8 @@ impl YagiDesign {
             }
             wires.push(wire(&e.name, [x, -c_out, z], [x, c_out, z], c_tube));
             for (k, &(a, b, t)) in pieces.iter().enumerate().skip(1) {
-                wires.push(wire(&format!("{} ·{} sağ", e.name, k + 1), [x, a, z], [x, b, z], t));
-                wires.push(wire(&format!("{} ·{} sol", e.name, k + 1), [x, -a, z], [x, -b, z], t));
+                wires.push(wire(&crate::tf!("{} ·{} right", "{} ·{} sağ", e.name, k + 1), [x, a, z], [x, b, z], t));
+                wires.push(wire(&crate::tf!("{} ·{} left", "{} ·{} sol", e.name, k + 1), [x, -a, z], [x, -b, z], t));
             }
             map.push(first..wires.len());
             for ld in self.loads.iter().filter(|l| l.element == i) {
@@ -229,10 +229,10 @@ pub enum BoomMount {
 impl BoomMount {
     pub fn label(&self) -> &'static str {
         match self {
-            BoomMount::None => "Düzeltme yok (yalıtkan bum / uzakta)",
-            BoomMount::ThroughBonded => "Bumdan geçen, temaslı",
-            BoomMount::ThroughInsulated => "Bumdan geçen, yalıtılmış",
-            BoomMount::Custom(_) => "Kullanıcı tanımlı",
+            BoomMount::None => crate::i18n::t("No correction (insulating boom / clear of boom)", "Düzeltme yok (yalıtkan bum / uzakta)"),
+            BoomMount::ThroughBonded => crate::i18n::t("Through boom, bonded", "Bumdan geçen, temaslı"),
+            BoomMount::ThroughInsulated => crate::i18n::t("Through boom, insulated", "Bumdan geçen, yalıtılmış"),
+            BoomMount::Custom(_) => crate::i18n::t("User defined", "Kullanıcı tanımlı"),
         }
     }
 }
@@ -309,7 +309,7 @@ impl Boom {
 /// Kesim listesinin bir satırı.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CutPiece {
-    /// Parça açıklaması (ör. "orta", "2. bölüm", "uç").
+    /// Parça açıklaması (ör. crate::i18n::t("center", "orta"), "2. bölüm", crate::i18n::t("tip", "uç")).
     pub label: String,
     /// Adet (orta parça 1, yan parçalar 2).
     pub count: usize,
@@ -346,9 +346,9 @@ impl YagiDesign {
                 let extra = if k == last { half_corr } else { 0.0 };
                 if k == 0 {
                     // Orta boru tek parçadır; tek bölümlü elemanda düzeltme iki uca da eklenir.
-                    CutPiece { label: if last == 0 { "tek parça".into() } else { "orta".into() }, count: 1, tube: t.clone(), length: 2.0 * (b + extra) }
+                    CutPiece { label: if last == 0 { crate::i18n::t("one piece", "tek parça").into() } else { crate::i18n::t("center", "orta").into() }, count: 1, tube: t.clone(), length: 2.0 * (b + extra) }
                 } else {
-                    let label = if k == last { "uç".to_string() } else { format!("{}. bölüm", k + 1) };
+                    let label = if k == last { crate::i18n::t("tip", "uç").to_string() } else { crate::tf!("section {}", "{}. bölüm", k + 1) };
                     CutPiece { label, count: 2, tube: t.clone(), length: b - a + extra + self.boom.overlap }
                 }
             })

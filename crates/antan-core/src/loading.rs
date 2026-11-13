@@ -65,11 +65,11 @@ pub fn tune_inductance(l_start: f64, target_x: f64, eval: impl Fn(f64) -> Option
 pub fn trap_dipole(tube: &Tube) -> Antenna {
     let (inner, outer) = (10.07, 6.7);
     let half = inner + outer;
-    let mut w = wire("Tuzaklı dipol", [0.0, -half, 0.0], [0.0, half, 0.0], tube);
+    let mut w = wire(crate::i18n::t("Trap dipole", "Tuzaklı dipol"), [0.0, -half, 0.0], [0.0, half, 0.0], tube);
     w.segments = 168;
     let trap = LoadKind::Trap { l: 8.2e-6, resonance: 7.1e6, q: 150.0 };
     let t = |y: f64| (y + half) / (2.0 * half);
-    let mut a = Antenna::new("Tuzaklı dipol 40/80 m", 3.7e6, vec![w], vec![source(0, 0.5)]);
+    let mut a = Antenna::new(crate::i18n::t("Trap dipole 40/80 m", "Tuzaklı dipol 40/80 m"), 3.7e6, vec![w], vec![source(0, 0.5)]);
     a.loads = vec![Load { wire: 0, position: t(-inner), kind: trap }, Load { wire: 0, position: t(inner), kind: trap }];
     a.ground = Ground::Real { permittivity: 13.0, conductivity: 0.005 };
     for w in &mut a.wires {
@@ -84,7 +84,7 @@ pub fn trap_dipole(tube: &Tube) -> Antenna {
 pub fn loaded_vertical(frequency: f64, tube: &Tube) -> Antenna {
     let lambda = C0 / frequency;
     let h = 0.125 * lambda;
-    let mut a = Antenna::new("Bobin yüklü kısa dikey", frequency, vec![wire("Dikey", [0.0; 3], [0.0, 0.0, h], tube)], vec![source(0, 0.0)]);
+    let mut a = Antenna::new(crate::i18n::t("Coil-loaded short vertical", "Bobin yüklü kısa dikey"), frequency, vec![wire(crate::i18n::t("Vertical", "Dikey"), [0.0; 3], [0.0, 0.0, h], tube)], vec![source(0, 0.0)]);
     a.ground = Ground::Perfect;
     a.loads = vec![Load { wire: 0, position: 0.5, kind: LoadKind::SeriesRlc { r: 0.0, l: 5e-6, c: 0.0 } }];
     if let Some((l, _)) = tune_load_inductance(&a, 0, 0.0) {

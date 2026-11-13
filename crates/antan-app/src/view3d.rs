@@ -10,6 +10,8 @@ use antan_core::farfield::{Pattern, direction};
 use antan_core::{Antenna, Solution};
 
 use crate::theme;
+use antan_core::i18n::t as tl;
+
 
 pub struct View3d {
     pub yaw: f32,
@@ -54,20 +56,20 @@ fn normalize(a: V3) -> V3 {
 
 pub fn toolbar(ui: &mut egui::Ui, v: &mut View3d) {
     ui.horizontal(|ui| {
-        ui.toggle_value(&mut v.show_pattern, "Diyagram");
-        ui.toggle_value(&mut v.show_antenna, "Anten");
-        ui.toggle_value(&mut v.show_currents, "Akım renkleri");
-        ui.toggle_value(&mut v.show_grid, "Izgara");
+        ui.toggle_value(&mut v.show_pattern, tl("Pattern", "Diyagram"));
+        ui.toggle_value(&mut v.show_antenna, tl("Antenna", "Anten"));
+        ui.toggle_value(&mut v.show_currents, tl("Current colors", "Akım renkleri"));
+        ui.toggle_value(&mut v.show_grid, tl("Grid", "Izgara"));
         ui.separator();
-        ui.label("Bakış:");
-        for (label, yaw, pitch) in [("3B", -0.65, 0.45), ("Üst", 0.0, 1.5707), ("Yan", 0.0, 0.0), ("Ön", -1.5708, 0.0)] {
+        ui.label(tl("View:", "Bakış:"));
+        for (label, yaw, pitch) in [(tl("3D", "3B"), -0.65, 0.45), (tl("Top", "Üst"), 0.0, 1.5707), (tl("Side", "Yan"), 0.0, 0.0), (tl("Front", "Ön"), -1.5708, 0.0)] {
             if ui.small_button(label).clicked() {
                 v.yaw = yaw;
                 v.pitch = pitch;
             }
         }
         ui.separator();
-        ui.label("Aralık");
+        ui.label(tl("Range", "Aralık"));
         ui.add(egui::DragValue::new(&mut v.range_db).range(10.0..=60.0).speed(0.5).suffix(" dB"));
     });
 }
@@ -135,7 +137,7 @@ pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_d
     }
 
     // Eksenler.
-    for (d, col, label) in [([1.25, 0.0, 0.0], theme::BAD, "X ileri"), ([0.0, 1.25, 0.0], theme::GOOD, "Y"), ([0.0, 0.0, 1.25], theme::ACCENT, "Z")] {
+    for (d, col, label) in [([1.25, 0.0, 0.0], theme::BAD, tl("X front", "X ileri")), ([0.0, 1.25, 0.0], theme::GOOD, "Y"), ([0.0, 0.0, 1.25], theme::ACCENT, "Z")] {
         let p0 = to_screen(cam([0.0; 3], yaw, pitch));
         let p1 = to_screen(cam(d, yaw, pitch));
         painter.line_segment([p0, p1], Stroke::new(1.0, col.gamma_multiply(0.7)));
@@ -161,7 +163,7 @@ pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_d
     painter.text(
         rect.left_top() + Vec2::new(10.0, 8.0),
         egui::Align2::LEFT_TOP,
-        "Sürükle: döndür · Tekerlek: yakınlaştır · Çift tık: sıfırla",
+        tl("Drag: rotate · Wheel: zoom · Double-click: reset", "Sürükle: döndür · Tekerlek: yakınlaştır · Çift tık: sıfırla"),
         egui::FontId::proportional(11.0),
         theme::TEXT_DIM,
     );

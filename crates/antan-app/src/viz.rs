@@ -8,6 +8,9 @@ use antan_core::matching::{reflection, swr};
 use antan_core::solver::SweepPoint;
 
 use crate::theme;
+use antan_core::i18n::t as tl;
+use antan_core::tf;
+
 
 pub fn fmt_z(z: Complex64) -> String {
     format!("{:.1} {} j{:.1} Ω", z.re, if z.im >= 0.0 { "+" } else { "−" }, z.im.abs())
@@ -93,8 +96,8 @@ pub fn polar_plot(ui: &mut egui::Ui, size: Vec2, title: &str, cut: &[(f64, f64)]
     }
     // Işınlar ve açı etiketleri.
     let names: [&str; 4] = match kind {
-        Polar::Azimuth => ["İLERİ", "SOL", "GERİ", "SAĞ"],
-        Polar::Elevation => ["İLERİ", "ZENİT", "GERİ", "NADİR"],
+        Polar::Azimuth => [tl("FRONT", "İLERİ"), tl("LEFT", "SOL"), tl("BACK", "GERİ"), tl("RIGHT", "SAĞ")],
+        Polar::Elevation => [tl("FRONT", "İLERİ"), tl("ZENITH", "ZENİT"), tl("BACK", "GERİ"), tl("NADIR", "NADİR")],
     };
     for k in 0..12 {
         let a = k as f64 * PI / 6.0;
@@ -132,7 +135,7 @@ pub fn polar_plot(ui: &mut egui::Ui, size: Vec2, title: &str, cut: &[(f64, f64)]
     p.add(Shape::line(pts, Stroke::new(2.0, theme::ACCENT)));
 
     // Bilgi.
-    let lines = [format!("Maks. {:.2} dBi", info.max_gain_dbi), format!("−3 dB: {:.0}°", info.beamwidth_deg), format!("Ö/A: {:.1} dB", info.fb_db)];
+    let lines = [tf!("Max. {:.2} dBi", "Maks. {:.2} dBi", info.max_gain_dbi), format!("−3 dB: {:.0}°", info.beamwidth_deg), tf!("F/B: {:.1} dB", "Ö/A: {:.1} dB", info.fb_db)];
     for (i, l) in lines.iter().enumerate() {
         put(&p, rect.right_top() + Vec2::new(-10.0, 8.0 + 15.0 * i as f32), Align2::RIGHT_TOP, (l.clone(), FontId::proportional(11.5), if i == 0 { Color32::WHITE } else { theme::TEXT_DIM }));
     }
@@ -152,7 +155,7 @@ pub fn polar_plot(ui: &mut egui::Ui, size: Vec2, title: &str, cut: &[(f64, f64)]
             let db = db_of(g);
             p.line_segment([center, at(ang, radius)], Stroke::new(1.0, Color32::WHITE.gamma_multiply(0.4)));
             p.circle_filled(at(ang, r_of(db)), 4.0, Color32::WHITE);
-            readout(&p, rect, hp, &[format!("{:.0}°", ang.to_degrees()), format!("{:.2} dBi", db + info.max_gain_dbi), format!("{db:+.2} dB (göreli)")]);
+            readout(&p, rect, hp, &[format!("{:.0}°", ang.to_degrees()), format!("{:.2} dBi", db + info.max_gain_dbi), tf!("{db:+.2} dB (relative)", "{db:+.2} dB (göreli)")]);
         }
     }
 }
@@ -276,7 +279,7 @@ pub fn rx_chart(ui: &mut egui::Ui, size: Vec2, sweep: &[SweepPoint], z0: f64, de
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, "Empedans", FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tl("Impedance", "Empedans"), FontId::proportional(13.0), Color32::WHITE);
     p.text(rect.left_top() + Vec2::new(90.0, 7.0), Align2::LEFT_TOP, "— R", FontId::proportional(11.5), theme::ACCENT);
     p.text(rect.left_top() + Vec2::new(125.0, 7.0), Align2::LEFT_TOP, "— X", FontId::proportional(11.5), theme::SERIES2);
     if sweep.len() < 2 {
@@ -329,7 +332,7 @@ pub fn smith_chart(ui: &mut egui::Ui, size: Vec2, sweep: &[SweepPoint], z0: f64,
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, format!("Smith abağı ({z0:.0} Ω)"), FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tf!("Smith chart ({z0:.0} Ω)", "Smith abağı ({z0:.0} Ω)"), FontId::proportional(13.0), Color32::WHITE);
     let center = rect.center() + Vec2::new(0.0, 8.0);
     let rad = (rect.width().min(rect.height() - 16.0) * 0.5 - 18.0).max(20.0);
     let g2s = |g: Complex64| center + Vec2::new(g.re as f32, -(g.im as f32)) * rad;
@@ -399,7 +402,7 @@ pub fn current_plot(ui: &mut egui::Ui, size: Vec2, series: &[(String, Vec<(f64, 
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, "Akım genliği (eleman boyunca, uçtan uca)", FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tl("Current magnitude (along each element, tip to tip)", "Akım genliği (eleman boyunca, uçtan uca)"), FontId::proportional(13.0), Color32::WHITE);
     let plot = Rect::from_min_max(rect.min + Vec2::new(12.0, 26.0), rect.max - Vec2::new(12.0, 10.0));
     p.rect_stroke(plot, 0.0, Stroke::new(1.0, theme::GRID), StrokeKind::Middle);
     let maxv = series.iter().flat_map(|s| s.1.iter().map(|v| v.1)).fold(1e-15, f64::max);

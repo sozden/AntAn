@@ -7,6 +7,7 @@
 
 pub mod farfield;
 pub mod geometry;
+pub mod i18n;
 pub mod linalg;
 pub mod loading;
 pub mod matching;
