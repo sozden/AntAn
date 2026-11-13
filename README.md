@@ -1,6 +1,10 @@
+<p align="center"><img src="assets/logo.svg" width="140" alt="AntAn logo"></p>
+
 # AntAn
 
 **English** · [Türkçe](README.tr.md)
+
+**[User guide](docs/user-guide.md)** · [Kullanma kılavuzu (Türkçe)](docs/kullanim-kilavuzu.md) · [Download for Windows](https://github.com/sozden/AntAn/releases/latest)
 
 An **antenna analysis and design program** in the spirit of EZNEC/MMANA, written from scratch in
 Rust. It has its own method-of-moments (MoM) solver, element-based Yagi design (including tapered /
@@ -131,7 +135,10 @@ crates/
     i18n.rs       English / Turkish texts
     tests/        validation tests
     examples/explore.rs  exploration tool used to tune template dimensions
-  antan-app/    egui desktop UI (dark theme)
+  antan-app/    egui desktop UI (dark theme); build.rs embeds the exe icon
+assets/         logo.svg (source) and generated icons
+tools/          make-icons.ps1 — regenerates the icons from logo.svg
+docs/           user guides (EN/TR) and screenshots
 ```
 
 Axes: +X along the boom (forward), Y along the elements, +Z up. SI units in the core, mm in the UI.

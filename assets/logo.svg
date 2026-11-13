@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <title>AntAn</title>
+  <!-- İzometrik 3B Yagi ve ışıma lobu. Tek kaynak: simge PNG/ICO dosyaları bundan üretilir
+       (tools/make-icons.ps1). Renkler programın temasıyla aynıdır. -->
+  <g transform="translate(-40 -40)">
+    <rect x="40" y="40" width="180" height="180" rx="30" fill="#151A22"/>
+    <g transform="translate(130 130) scale(0.88) translate(-130 -130)">
+    <g transform="translate(140 126) rotate(-26.6)">
+      <ellipse cx="6" cy="0" rx="82" ry="40" fill="#40BEFF" fill-opacity="0.26" stroke="#40BEFF" stroke-width="2"/>
+      <ellipse cx="-92" cy="0" rx="14" ry="10" fill="#40BEFF" fill-opacity="0.2" stroke="#40BEFF" stroke-width="1.5"/>
+    </g>
+    <line x1="69" y1="166" x2="195" y2="103" stroke="#4E5868" stroke-width="8" stroke-linecap="round"/>
+    <line x1="69" y1="164" x2="195" y2="101" stroke="#9AA5B8" stroke-width="3" stroke-linecap="round"/>
+    <g stroke-linecap="round">
+      <g stroke="#B8731A" stroke-width="7">
+        <line x1="44.4" y1="141" x2="113.6" y2="181"/>
+        <line x1="75.4" y1="129.2" x2="137.8" y2="165.2"/>
+        <line x1="105.3" y1="118" x2="160.7" y2="150"/>
+        <line x1="135.2" y1="106.8" x2="183.6" y2="134.8"/>
+        <line x1="165" y1="95.6" x2="206.6" y2="119.6"/>
+      </g>
+      <g stroke="#F5A623" stroke-width="4.5">
+        <line x1="44.4" y1="140" x2="113.6" y2="180"/>
+        <line x1="75.4" y1="128.2" x2="137.8" y2="164.2"/>
+        <line x1="105.3" y1="117" x2="160.7" y2="149"/>
+        <line x1="135.2" y1="105.8" x2="183.6" y2="133.8"/>
+        <line x1="165" y1="94.6" x2="206.6" y2="118.6"/>
+      </g>
+      <g stroke="#FFE2A8" stroke-width="1.5">
+        <line x1="45" y1="138.6" x2="113" y2="177.8"/>
+        <line x1="76" y1="126.8" x2="137" y2="162"/>
+        <line x1="106" y1="115.6" x2="160" y2="146.8"/>
+        <line x1="136" y1="104.4" x2="183" y2="131.6"/>
+        <line x1="166" y1="93.2" x2="206" y2="116.4"/>
+      </g>
+    </g>
+    </g>
+  </g>
+</svg>

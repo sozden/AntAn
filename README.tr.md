@@ -1,6 +1,10 @@
+<p align="center"><img src="assets/logo.svg" width="140" alt="AntAn logo"></p>
+
 # AntAn
 
 [English](README.md) · **Türkçe**
+
+**[Kullanma kılavuzu](docs/kullanim-kilavuzu.md)** · [User guide (English)](docs/user-guide.md) · [Windows için indir](https://github.com/sozden/AntAn/releases/latest)
 
 EZNEC/MMANA tarzı, sıfırdan Rust ile yazılmış bir **anten analiz ve hesaplama programı**.
 Kendi moment yöntemi (MoM) çözücüsü, eleman bazlı Yagi tasarımı (kademeli/teleskopik borular
@@ -126,7 +130,10 @@ crates/
     i18n.rs       İngilizce / Türkçe metinler
     tests/        doğrulama testleri
     examples/explore.rs  şablon boyutlarını taramak için keşif aracı
-  antan-app/    egui masaüstü arayüzü (koyu tema)
+  antan-app/    egui masaüstü arayüzü (koyu tema); build.rs exe simgesini gömer
+assets/         logo.svg (kaynak) ve üretilmiş simgeler
+tools/          make-icons.ps1 — simgeleri logo.svg'den yeniden üretir
+docs/           kullanma kılavuzları (TR/EN) ve ekran görüntüleri
 ```
 
 Eksenler: +X bum yönü (ileri), Y eleman ekseni, +Z yukarı. Birimler çekirdekte SI, arayüzde mm.
