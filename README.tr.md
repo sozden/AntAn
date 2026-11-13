@@ -10,7 +10,8 @@ EZNEC/MMANA tarzı, sıfırdan Rust ile yazılmış bir **anten analiz ve hesapl
 Kendi moment yöntemi (MoM) çözücüsü, eleman bazlı Yagi tasarımı (kademeli/teleskopik borular
 dahil), zemin modeli, toplu yükler ve tuzaklar, bum düzeltmesi ve kesim listesi, 3B ışıma diyagramı,
 Smith abağı, eşleme hesapları ve otomatik iyileştirme içerir. Arayüz **İngilizce ve Türkçe**
-kullanılabilir (Language / Dil menüsü; seçim hatırlanır).
+kullanılabilir (Language / Dil menüsü; seçim hatırlanır). Küçük ekranlar için yazı boyutu
+ayarlanabilir (Görünüm → Yazı boyutu, Ctrl +/−).
 
 ![3B diyagram — 7 elemanlı kademeli borulu Yagi](docs/pattern-3d-tapered-yagi.png)
 
@@ -165,7 +166,7 @@ ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
 
 Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
 bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
-`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr` ek seçeneklerdir.
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3` ek seçeneklerdir.
 
 ## Yol haritası
 

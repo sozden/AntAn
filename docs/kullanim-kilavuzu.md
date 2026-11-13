@@ -47,6 +47,10 @@ cargo run --release -p antan
 
 **Dil.** Arayüz İngilizce açılır. **🌐 Language / Dil** menüsünden Türkçe'yi seçin; seçim hatırlanır.
 
+**Yazı boyutu.** Küçük ya da yüksek çözünürlüklü ekranda **Görünüm → Yazı boyutu** (%85 … %200) ya da
+**Ctrl +** / **Ctrl −** kullanın (**Ctrl 0** sıfırlar). Bütün arayüz ölçeklenir ve ayar hatırlanır;
+yan paneller pencereyle daralır, geniş tablolar yana kaydırılır.
+
 ## 2. Ekran
 
 ![Numaralı bölümleriyle ana pencere](guide/tr/overview.png)

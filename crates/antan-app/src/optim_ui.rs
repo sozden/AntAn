@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, RichText, Sense, Shape, Stroke, Vec2};
+use eframe::egui::{self, Align2, Color32, Pos2, RichText, Sense, Shape, Stroke, Vec2};
 
 use antan_core::optimize::{self, Goals, Score};
 use antan_core::yagi::YagiDesign;
@@ -123,7 +123,7 @@ impl Optim {
                 });
             });
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if !self.running {
                     if ui.add(egui::Button::new(RichText::new(tl("▶ Start", "▶ Başlat")).strong()).fill(theme::ACCENT_DIM)).clicked() {
                         self.launch(ui.ctx(), design.clone(), goals.clone());
@@ -177,7 +177,7 @@ impl Optim {
                     .collect();
                 p.add(Shape::line(pts, Stroke::new(1.8, theme::GOOD)));
             }
-            p.text(r.left_top() + Vec2::new(6.0, 4.0), Align2::LEFT_TOP, tl("best cost (up = better)", "en iyi maliyet (yukarı = daha iyi)"), FontId::proportional(10.0), theme::TEXT_DIM);
+            p.text(r.left_top() + Vec2::new(6.0, 4.0), Align2::LEFT_TOP, tl("best cost (up = better)", "en iyi maliyet (yukarı = daha iyi)"), theme::plot_font(10.0), theme::TEXT_DIM);
 
             if let Some((best, _)) = &sh.best {
                 ui.add_space(6.0);

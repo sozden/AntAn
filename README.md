@@ -10,7 +10,8 @@ An **antenna analysis and design program** in the spirit of EZNEC/MMANA, written
 Rust. It has its own method-of-moments (MoM) solver, element-based Yagi design (including tapered /
 telescoping tubes), ground modelling, lumped loads and traps, boom correction with cut lists, a 3D
 radiation pattern, a Smith chart, matching calculators and an optimizer. The user interface is
-available in **English and Turkish** (Language / Dil menu).
+available in **English and Turkish** (Language / Dil menu), with an adjustable text size
+(View → Text size, Ctrl +/−) for small screens.
 
 ![3D pattern — 7-element tapered-tube Yagi](docs/pattern-3d-tapered-yagi.png)
 
@@ -172,7 +173,7 @@ differences of a few percent from NEC are normal.
 Non-interactive UI check: started with `ANTAN_AUTOSHOT=<png path>`, the program saves a screenshot of
 the window when the sweep is finished and exits. Further options: `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
 `ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded`, `ANTAN_AUTOSHOT_OPTIM=<iterations>`,
-`ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`.
+`ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3`.
 
 ## Roadmap
 

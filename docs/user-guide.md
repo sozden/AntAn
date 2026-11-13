@@ -48,6 +48,10 @@ cargo run --release -p antan
 **Language.** The interface starts in English. Use the **🌐 Language / Dil** menu to switch to
 Turkish; the choice is remembered.
 
+**Text size.** On a small or high-resolution screen use **View → Text size** (85 % … 200 %) or
+**Ctrl +** / **Ctrl −** (**Ctrl 0** resets). The whole interface scales and the setting is remembered;
+side panels shrink with the window and wide tables scroll sideways.
+
 ## 2. The screen
 
 ![Main window with numbered areas](guide/en/overview.png)

@@ -66,6 +66,8 @@ pub struct AntAnApp {
     optim: Optim,
     tune_msg: Option<String>,
     show_about: bool,
+    /// Kayıtlı arayüz ölçeği; Ctrl +/− ile değişince ayarlara yazılır.
+    text_scale: f32,
 
     shotter: shot::Shotter,
     window_rect: Option<egui::Rect>,
@@ -76,12 +78,16 @@ pub struct AntAnApp {
 impl AntAnApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::apply(&cc.egui_ctx);
+        let settings = Settings::load();
         // Dil: kayıtlı ayar; ANTAN_LANG=tr|en (doğrulama için) onu geçersiz kılar.
         let lang = match std::env::var("ANTAN_LANG").ok().as_deref() {
             Some("tr") => Language::Turkish,
             Some("en") => Language::English,
-            _ => Settings::load().language,
+            _ => settings.language,
         };
+        // Yazı boyutu: kayıtlı ayar; ANTAN_SCALE=1.3 gibi (doğrulama için) onu geçersiz kılar.
+        let text_scale = std::env::var("ANTAN_SCALE").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(settings.text_scale).clamp(0.5, 3.0);
+        cc.egui_ctx.set_zoom_factor(text_scale);
         set_language(lang);
         let project = match std::env::var("ANTAN_AUTOSHOT_TEMPLATE").ok().as_deref() {
             Some("moxon") => Project::template(Kind::Moxon, 144.3e6),
@@ -126,6 +132,7 @@ impl AntAnApp {
             optim: Optim::default(),
             tune_msg: None,
             show_about: false,
+            text_scale,
             shotter: shot::Shotter::default(),
             window_rect: None,
             autoshot: std::env::var("ANTAN_AUTOSHOT").ok().map(PathBuf::from),
@@ -388,13 +395,24 @@ impl AntAnApp {
                         ui.close();
                     }
                 }
+                ui.separator();
+                ui.menu_button(tl("Text size", "Yazı boyutu"), |ui| {
+                    for s in theme::TEXT_SCALES {
+                        if ui.selectable_label((self.text_scale - s).abs() < 0.01, format!("{:.0} %", s * 100.0)).clicked() {
+                            ctx.set_zoom_factor(s);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                    ui.label(RichText::new(tl("Ctrl + / Ctrl − / Ctrl 0", "Ctrl + / Ctrl − / Ctrl 0")).color(theme::TEXT_DIM));
+                });
             });
             // Dil menüsü her iki dilde de okunabilsin diye iki dilli başlıklı.
             ui.menu_button("🌐 Language / Dil", |ui| {
                 for (l, name) in [(Language::English, "English"), (Language::Turkish, "Türkçe")] {
                     if ui.selectable_label(language() == l, name).clicked() {
                         set_language(l);
-                        Settings { language: l }.save();
+                        Settings::current(self.text_scale).save();
                         self.status = tl("Language changed. New templates use the selected language.", "Dil değişti. Yeni şablonlar seçilen dili kullanır.").into();
                         ui.close();
                     }
@@ -410,7 +428,7 @@ impl AntAnApp {
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("AntAn").size(20.0).strong().color(theme::ACCENT));
             ui.label(RichText::new(tl("antenna analysis and design", "anten analiz ve hesaplama")).color(theme::TEXT_DIM));
             ui.separator();
@@ -502,7 +520,7 @@ impl AntAnApp {
         egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(6.0).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(RichText::new(title).small().color(theme::TEXT_DIM));
-            ui.label(RichText::new(value).size(20.0).strong().color(color));
+            ui.label(RichText::new(value).size(22.0).strong().color(color));
             if !sub.is_empty() {
                 ui.label(RichText::new(sub).small().color(theme::TEXT_DIM));
             }
@@ -557,7 +575,9 @@ impl AntAnApp {
         let avail = ui.available_size();
         let highlight = self.highlight();
         ui.horizontal_top(|ui| {
-            let w = (avail.x - 250.0).max(200.0);
+            // Dar alanda (küçük ekran / büyük yazı) kart sütunu da daralır.
+            let cards_w = (avail.x * 0.3).clamp(185.0, 240.0);
+            let w = (avail.x - cards_w - 10.0).max(200.0);
             let sol = match &self.solution {
                 Some(Ok(s)) => Some(s),
                 _ => None,
@@ -573,7 +593,7 @@ impl AntAnApp {
             };
             view3d::show(ui, Vec2::new(w, avail.y - 4.0), self.pattern.as_ref(), max_db, &self.antenna, sol, &highlight, boom, &mut self.view);
             ui.vertical(|ui| {
-                ui.set_width(240.0);
+                ui.set_width(cards_w);
                 self.summary_cards(ui);
             });
         });
@@ -584,7 +604,7 @@ impl AntAnApp {
         let az = farfield::azimuth_cut(sol, s.max_theta, 360);
         let el = farfield::elevation_cut(sol, s.max_phi, 360);
         let mut range = self.cut_range_db;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(tl("Scale range", "Ölçek aralığı"));
             ui.add(egui::Slider::new(&mut range, 10.0..=60.0).suffix(" dB"));
             ui.label(RichText::new(tf!("Horizontal cut θ = {:.0}° (elevation {:.0}°), vertical cut φ = {:.0}°", "Yatay kesit θ = {:.0}° (yükseliş {:.0}°), düşey kesit φ = {:.0}°", s.max_theta.to_degrees(), 90.0 - s.max_theta.to_degrees(), s.max_phi.to_degrees())).color(theme::TEXT_DIM));
@@ -628,7 +648,7 @@ impl AntAnApp {
     }
 
     fn sweep_tab(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(tl("Sweep: ±", "Tarama: ±"));
             ui.add(egui::DragValue::new(&mut self.project.sweep_span_pct).range(0.2..=40.0).speed(0.1).suffix(" %"));
             ui.label(tl("points", "nokta"));
@@ -687,10 +707,10 @@ impl AntAnApp {
         let z = sol.impedance();
         let z0 = self.project.z0;
         let f = self.antenna.frequency;
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(tf!("Feed: {}", "Besleme: {}", fmt_z(z))).size(16.0).strong());
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(tf!("Feed: {}", "Besleme: {}", fmt_z(z))).size(17.5).strong());
             let swr = matching::swr(z, z0);
-            ui.label(RichText::new(format!("SWR {swr:.2} ({z0:.0} Ω)")).size(16.0).color(theme::swr_color(swr)));
+            ui.label(RichText::new(format!("SWR {swr:.2} ({z0:.0} Ω)")).size(17.5).color(theme::swr_color(swr)));
         });
         ui.add_space(4.0);
         let card = |ui: &mut egui::Ui, title: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
@@ -777,7 +797,7 @@ impl AntAnApp {
                 ui.set_width(ui.available_width());
                 ui.label(RichText::new(tl("Auto-tune the driven element", "Sürülen elemanı otomatik ayarla")).strong().color(theme::ACCENT));
                 ui.label(RichText::new(tl("The driven element length is iterated with the full solver until the feed reactance hits the target.", "Sürülen elemanın boyu, gerçek çözücüyle yinelenerek hedef besleme reaktansına getirilir.")).small().color(theme::TEXT_DIM));
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button(tl("Make resonant (X = 0, gamma/direct feed)", "Rezonansa getir (X = 0, gamma/doğrudan besleme)")).clicked() {
                         match d.tune_driven(|_| Some(0.0)) {
                             Some((nd, nz)) => {
@@ -857,6 +877,14 @@ impl eframe::App for AntAnApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.window_rect = Some(ui.max_rect());
+        // Ölçek menüden ya da Ctrl +/−/0 ile değiştiyse kaydet.
+        let z = ctx.zoom_factor();
+        if (z - self.text_scale).abs() > 1e-3 {
+            self.text_scale = z;
+            if std::env::var_os("ANTAN_SCALE").is_none() {
+                Settings::current(z).save();
+            }
+        }
         self.shortcuts(&ctx);
         self.recompute_if_needed(&ctx);
         if let Some(r) = self.sweep_job.poll() {
@@ -910,18 +938,23 @@ impl eframe::App for AntAnApp {
             ui.add_space(3.0);
         });
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-        egui::Panel::left("tree").resizable(true).default_size(215.0).size_range(170.0..=360.0).show(ui, |ui| editor::model_tree(self, ui));
-        egui::Panel::right("props").resizable(true).default_size(400.0).size_range(320.0..=620.0).show(ui, |ui| {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        // Yan paneller pencereye orantılı sınırlanır; büyük yazı boyutunda ya da küçük ekranda
+        // ortadaki grafik alanı sıkışmasın. Geniş içerik yatay kaydırılır, paneli büyütmez.
+        let total = ui.available_width();
+        let left_max = (total * 0.18).clamp(150.0, 360.0);
+        let right_max = (total * 0.36).clamp(300.0, 620.0);
+        egui::Panel::left("tree").resizable(true).default_size(215.0f32.min(left_max)).size_range(150.0..=left_max).show(ui, |ui| editor::model_tree(self, ui));
+        egui::Panel::right("props").resizable(true).default_size(400.0f32.min(right_max)).size_range(300.0..=right_max).show(ui, |ui| {
+            egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
                 ui.add_space(2.0);
                 editor::properties(self, ui);
             });
         });
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 for (t, l) in [(Tab::Pattern3d, tl("🌐 3D pattern", "🌐 3B diyagram")), (Tab::Cuts, tl("◔ Cuts and currents", "◔ Kesitler ve akımlar")), (Tab::Sweep, tl("📈 SWR / Smith", "📈 SWR / Smith")), (Tab::Matching, tl("🔌 Matching", "🔌 Eşleme")), (Tab::Optimize, tl("⚙ Optimization", "⚙ İyileştirme"))] {
                     let sel = self.tab == t;
-                    if ui.add(egui::Button::selectable(sel, RichText::new(l).size(14.0))).clicked() {
+                    if ui.add(egui::Button::selectable(sel, RichText::new(l).size(15.5))).clicked() {
                         self.tab = t;
                     }
                 }
@@ -953,15 +986,26 @@ impl eframe::App for AntAnApp {
     }
 }
 
-/// Kullanıcı ayarları (şimdilik yalnız dil): Windows'ta %APPDATA%\AntAn\settings.json,
+/// Kullanıcı ayarları (dil, yazı boyutu): Windows'ta %APPDATA%\AntAn\settings.json,
 /// diğer sistemlerde ~/.config/antan/settings.json.
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 struct Settings {
     language: Language,
+    /// Arayüz ölçeği (egui zoom), 1.0 = normal.
+    text_scale: f32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { language: Language::default(), text_scale: 1.0 }
+    }
 }
 
 impl Settings {
+    fn current(text_scale: f32) -> Self {
+        Self { language: language(), text_scale }
+    }
     fn path() -> Option<PathBuf> {
         let base = std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("AntAn")).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("antan")))?;
         Some(base.join("settings.json"))

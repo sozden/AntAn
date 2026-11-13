@@ -17,7 +17,7 @@ pub fn fmt_z(z: Complex64) -> String {
 }
 
 fn small(text: impl ToString, color: Color32) -> (String, FontId, Color32) {
-    (text.to_string(), FontId::proportional(10.5), color)
+    (text.to_string(), theme::plot_font(10.5), color)
 }
 
 fn put(p: &egui::Painter, at: Pos2, align: Align2, t: (String, FontId, Color32)) {
@@ -26,7 +26,7 @@ fn put(p: &egui::Painter, at: Pos2, align: Align2, t: (String, FontId, Color32))
 
 /// Fare imleci yanında okuma kutusu.
 fn readout(p: &egui::Painter, area: Rect, at: Pos2, lines: &[String]) {
-    let font = FontId::proportional(11.5);
+    let font = theme::plot_font(11.5);
     let w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f32 * 6.6 + 14.0;
     let h = lines.len() as f32 * 15.0 + 8.0;
     let mut r = Rect::from_min_size(at + Vec2::new(12.0, 12.0), Vec2::new(w, h));
@@ -63,7 +63,7 @@ pub fn polar_plot(ui: &mut egui::Ui, size: Vec2, title: &str, cut: &[(f64, f64)]
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 8.0), Align2::LEFT_TOP, title, FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 8.0), Align2::LEFT_TOP, title, theme::plot_font(13.0), Color32::WHITE);
     let center = rect.center() + Vec2::new(0.0, 10.0);
     let radius = (rect.width().min(rect.height() - 20.0) * 0.5 - 44.0).max(20.0);
     let screen_angle = |a: f64| -> f64 {
@@ -113,7 +113,7 @@ pub fn polar_plot(ui: &mut egui::Ui, size: Vec2, title: &str, cut: &[(f64, f64)]
         };
         let pos = at(a, radius + 6.0);
         if k % 3 == 0 {
-            put(&p, pos, align, (format!("{} {}°", names[k / 3], k * 30), FontId::proportional(10.5), theme::ACCENT));
+            put(&p, pos, align, (format!("{} {}°", names[k / 3], k * 30), theme::plot_font(10.5), theme::ACCENT));
         } else {
             put(&p, pos, align, small(format!("{}°", k * 30), theme::TEXT_DIM));
         }
@@ -137,7 +137,7 @@ pub fn polar_plot(ui: &mut egui::Ui, size: Vec2, title: &str, cut: &[(f64, f64)]
     // Bilgi.
     let lines = [tf!("Max. {:.2} dBi", "Maks. {:.2} dBi", info.max_gain_dbi), format!("−3 dB: {:.0}°", info.beamwidth_deg), tf!("F/B: {:.1} dB", "Ö/A: {:.1} dB", info.fb_db)];
     for (i, l) in lines.iter().enumerate() {
-        put(&p, rect.right_top() + Vec2::new(-10.0, 8.0 + 15.0 * i as f32), Align2::RIGHT_TOP, (l.clone(), FontId::proportional(11.5), if i == 0 { Color32::WHITE } else { theme::TEXT_DIM }));
+        put(&p, rect.right_top() + Vec2::new(-10.0, 8.0 + 17.0 * i as f32), Align2::RIGHT_TOP, (l.clone(), theme::plot_font(11.5), if i == 0 { Color32::WHITE } else { theme::TEXT_DIM }));
     }
 
     // Fare okuması.
@@ -247,7 +247,7 @@ pub fn swr_chart(ui: &mut egui::Ui, size: Vec2, sweep: &[SweepPoint], z0: f64, d
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, format!("SWR ({z0:.0} Ω)"), FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, format!("SWR ({z0:.0} Ω)"), theme::plot_font(13.0), Color32::WHITE);
     if sweep.len() < 2 {
         return;
     }
@@ -279,9 +279,9 @@ pub fn rx_chart(ui: &mut egui::Ui, size: Vec2, sweep: &[SweepPoint], z0: f64, de
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tl("Impedance", "Empedans"), FontId::proportional(13.0), Color32::WHITE);
-    p.text(rect.left_top() + Vec2::new(90.0, 7.0), Align2::LEFT_TOP, "— R", FontId::proportional(11.5), theme::ACCENT);
-    p.text(rect.left_top() + Vec2::new(125.0, 7.0), Align2::LEFT_TOP, "— X", FontId::proportional(11.5), theme::SERIES2);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tl("Impedance", "Empedans"), theme::plot_font(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(105.0, 7.0), Align2::LEFT_TOP, "— R", theme::plot_font(11.5), theme::ACCENT);
+    p.text(rect.left_top() + Vec2::new(145.0, 7.0), Align2::LEFT_TOP, "— X", theme::plot_font(11.5), theme::SERIES2);
     if sweep.len() < 2 {
         return;
     }
@@ -332,7 +332,7 @@ pub fn smith_chart(ui: &mut egui::Ui, size: Vec2, sweep: &[SweepPoint], z0: f64,
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tf!("Smith chart ({z0:.0} Ω)", "Smith abağı ({z0:.0} Ω)"), FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tf!("Smith chart ({z0:.0} Ω)", "Smith abağı ({z0:.0} Ω)"), theme::plot_font(13.0), Color32::WHITE);
     let center = rect.center() + Vec2::new(0.0, 8.0);
     let rad = (rect.width().min(rect.height() - 16.0) * 0.5 - 18.0).max(20.0);
     let g2s = |g: Complex64| center + Vec2::new(g.re as f32, -(g.im as f32)) * rad;
@@ -402,7 +402,7 @@ pub fn current_plot(ui: &mut egui::Ui, size: Vec2, series: &[(String, Vec<(f64, 
     let (resp, p) = ui.allocate_painter(size, Sense::hover());
     let rect = resp.rect;
     p.rect_filled(rect, 6.0, theme::PLOT_BG);
-    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tl("Current magnitude (along each element, tip to tip)", "Akım genliği (eleman boyunca, uçtan uca)"), FontId::proportional(13.0), Color32::WHITE);
+    p.text(rect.left_top() + Vec2::new(10.0, 6.0), Align2::LEFT_TOP, tl("Current magnitude (along each element, tip to tip)", "Akım genliği (eleman boyunca, uçtan uca)"), theme::plot_font(13.0), Color32::WHITE);
     let plot = Rect::from_min_max(rect.min + Vec2::new(12.0, 26.0), rect.max - Vec2::new(12.0, 10.0));
     p.rect_stroke(plot, 0.0, Stroke::new(1.0, theme::GRID), StrokeKind::Middle);
     let maxv = series.iter().flat_map(|s| s.1.iter().map(|v| v.1)).fold(1e-15, f64::max);
@@ -410,6 +410,6 @@ pub fn current_plot(ui: &mut egui::Ui, size: Vec2, series: &[(String, Vec<(f64, 
         let col = if Some(k) == highlight { theme::WARM } else { theme::colormap(0.15 + 0.8 * k as f32 / series.len().max(1) as f32) };
         let line: Vec<Pos2> = pts.iter().map(|(t, v)| Pos2::new(plot.left() + plot.width() * *t as f32, plot.bottom() - plot.height() * (v / maxv) as f32 * 0.92)).collect();
         p.add(Shape::line(line, Stroke::new(if Some(k) == highlight { 2.6 } else { 1.6 }, col)));
-        p.text(plot.right_top() + Vec2::new(-6.0, 4.0 + 13.0 * k as f32), Align2::RIGHT_TOP, name, FontId::proportional(10.0), col);
+        p.text(plot.right_top() + Vec2::new(-6.0, 4.0 + 15.0 * k as f32), Align2::RIGHT_TOP, name, theme::plot_font(10.0), col);
     }
 }

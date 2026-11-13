@@ -53,8 +53,26 @@ pub fn apply(ctx: &egui::Context) {
     ctx.all_styles_mut(|s| {
         s.spacing.item_spacing = egui::vec2(8.0, 5.0);
         s.spacing.button_padding = egui::vec2(8.0, 3.0);
+        // egui varsayılanları (12.5 pt gövde) küçük ekranlarda zor okunuyor; bir kademe büyük.
+        use egui::{FontFamily::*, FontId, TextStyle};
+        s.text_styles = [
+            (TextStyle::Small, FontId::new(11.0, Proportional)),
+            (TextStyle::Body, FontId::new(14.5, Proportional)),
+            (TextStyle::Button, FontId::new(14.5, Proportional)),
+            (TextStyle::Heading, FontId::new(20.0, Proportional)),
+            (TextStyle::Monospace, FontId::new(13.5, Monospace)),
+        ]
+        .into();
     });
 }
+
+/// Grafiklerin üzerine çizilen yazılar için boyut (pt). Tek yerden büyütülebilsin diye.
+pub fn plot_font(size: f32) -> egui::FontId {
+    egui::FontId::proportional(size + 1.5)
+}
+
+/// Yazı boyutu (arayüz ölçeği) seçenekleri.
+pub const TEXT_SCALES: [f32; 7] = [0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0];
 
 /// 0..1 → "turbo" benzeri renk haritası (mavi → camgöbeği → yeşil → sarı → kırmızı).
 pub fn colormap(t: f32) -> Color32 {

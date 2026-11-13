@@ -73,7 +73,7 @@ pub fn model_tree(app: &mut AntAnApp, ui: &mut egui::Ui) {
     ui.separator();
     let lambda = C0 / app.project.model.frequency();
     let mut action: Option<TreeAction> = None;
-    egui::ScrollArea::vertical().auto_shrink([false, true]).show(ui, |ui| match &app.project.model {
+    egui::ScrollArea::both().auto_shrink([false, true]).show(ui, |ui| match &app.project.model {
         Model::Yagi(d) => {
             for (i, e) in d.elements.iter().enumerate() {
                 let icon = if i == d.driven { "📡".to_string() } else { format!("{}.", i + 1) };

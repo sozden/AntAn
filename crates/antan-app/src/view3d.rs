@@ -55,7 +55,7 @@ fn normalize(a: V3) -> V3 {
 }
 
 pub fn toolbar(ui: &mut egui::Ui, v: &mut View3d) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.toggle_value(&mut v.show_pattern, tl("Pattern", "Diyagram"));
         ui.toggle_value(&mut v.show_antenna, tl("Antenna", "Anten"));
         ui.toggle_value(&mut v.show_currents, tl("Current colors", "Akım renkleri"));
@@ -141,7 +141,7 @@ pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_d
         let p0 = to_screen(cam([0.0; 3], yaw, pitch));
         let p1 = to_screen(cam(d, yaw, pitch));
         painter.line_segment([p0, p1], Stroke::new(1.0, col.gamma_multiply(0.7)));
-        painter.text(p1, egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(11.0), col);
+        painter.text(p1, egui::Align2::CENTER_CENTER, label, theme::plot_font(11.0), col);
     }
 
     if v.show_antenna {
@@ -154,19 +154,16 @@ pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_d
         let c = cam(d, yaw, pitch);
         let p = g0 + Vec2::new(c[0], -c[2]) * 24.0;
         painter.line_segment([g0, p], Stroke::new(2.0, col));
-        painter.text(p + Vec2::new(c[0], -c[2]) * 8.0, egui::Align2::CENTER_CENTER, l, egui::FontId::proportional(10.0), col);
+        painter.text(p + Vec2::new(c[0], -c[2]) * 8.0, egui::Align2::CENTER_CENTER, l, theme::plot_font(10.0), col);
     }
 
     if v.show_pattern && pattern.is_some() {
         color_bar(&painter, Rect::from_min_max(rect.right_top() + Vec2::new(-56.0, 30.0), rect.right_bottom() + Vec2::new(-42.0, -30.0)), max_gain_dbi, v.range_db);
     }
-    painter.text(
-        rect.left_top() + Vec2::new(10.0, 8.0),
-        egui::Align2::LEFT_TOP,
-        tl("Drag: rotate · Wheel: zoom · Double-click: reset", "Sürükle: döndür · Tekerlek: yakınlaştır · Çift tık: sıfırla"),
-        egui::FontId::proportional(11.0),
-        theme::TEXT_DIM,
-    );
+    // İpucu: renk çubuğuyla çakışacak kadar darsa iki satıra böl.
+    let hint = tl("Drag: rotate · Wheel: zoom · Double-click: reset", "Sürükle: döndür · Tekerlek: yakınlaştır · Çift tık: sıfırla");
+    let galley = painter.layout(hint.to_string(), theme::plot_font(11.0), theme::TEXT_DIM, (rect.width() - 140.0).max(120.0));
+    painter.galley(rect.left_top() + Vec2::new(10.0, 8.0), galley, theme::TEXT_DIM);
 }
 
 fn draw_surface(painter: &egui::Painter, pat: &Pattern, max_gain_dbi: f64, v: &View3d, to_screen: &dyn Fn(V3) -> Pos2, translucent: bool) {
@@ -310,8 +307,8 @@ fn color_bar(painter: &egui::Painter, r: Rect, max_gain_dbi: f64, range: f64) {
         let t = ((db + range) / range) as f32;
         let y = r.bottom() - r.height() * t;
         painter.line_segment([Pos2::new(r.right(), y), Pos2::new(r.right() + 4.0, y)], Stroke::new(1.0, theme::TEXT_DIM));
-        painter.text(Pos2::new(r.right() + 6.0, y), egui::Align2::LEFT_CENTER, format!("{db:.0}"), egui::FontId::proportional(10.0), theme::TEXT_DIM);
+        painter.text(Pos2::new(r.right() + 6.0, y), egui::Align2::LEFT_CENTER, format!("{db:.0}"), theme::plot_font(10.0), theme::TEXT_DIM);
     }
-    painter.text(r.center_top() - Vec2::new(0.0, 6.0), egui::Align2::CENTER_BOTTOM, format!("{max_gain_dbi:.2} dBi"), egui::FontId::proportional(11.0), Color32::WHITE);
-    painter.text(r.center_bottom() + Vec2::new(0.0, 6.0), egui::Align2::CENTER_TOP, "dB", egui::FontId::proportional(10.0), theme::TEXT_DIM);
+    painter.text(r.center_top() - Vec2::new(0.0, 6.0), egui::Align2::CENTER_BOTTOM, format!("{max_gain_dbi:.2} dBi"), theme::plot_font(11.0), Color32::WHITE);
+    painter.text(r.center_bottom() + Vec2::new(0.0, 6.0), egui::Align2::CENTER_TOP, "dB", theme::plot_font(10.0), theme::TEXT_DIM);
 }
