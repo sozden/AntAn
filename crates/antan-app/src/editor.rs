@@ -4,7 +4,8 @@ use eframe::egui::{self, Color32, RichText};
 
 use antan_core::mechanics::{self, cantilever_tip_sag, tube_props, wind_force};
 use antan_core::templates::{Tube, wire};
-use antan_core::yagi::{BoomMount, TaperSection, YagiDesign, YagiElement};
+use antan_core::geometry::{Load, LoadKind};
+use antan_core::yagi::{BoomMount, ElementLoad, TaperSection, YagiDesign, YagiElement};
 use antan_core::{Antenna, C0, Material};
 
 use crate::app::AntAnApp;
@@ -216,6 +217,7 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
         Model::Wires(a) => wire_editor(ui, a, selected),
     }
 
+    loads_section(app, ui);
     mechanics_section(app, ui);
 
     section(ui, "Notlar", false, |ui| {
@@ -414,6 +416,206 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
 
     boom_section(ui, d);
     cut_list_section(ui, d);
+}
+
+// ------------------------------------------------------------------ yüklemeler
+
+/// Değer düzenleyici: SI değeri `scale` ile gösterim birimine çevirir.
+fn unit_value(ui: &mut egui::Ui, v: &mut f64, scale: f64, speed: f64, suffix: &str) -> bool {
+    let mut x = *v * scale;
+    let r = ui.add(egui::DragValue::new(&mut x).speed(speed).range(0.0..=1e9).max_decimals(3).suffix(suffix));
+    if r.changed() {
+        *v = x / scale;
+        true
+    } else {
+        false
+    }
+}
+
+/// Yük türü ve parametreleri. Değiştiyse true.
+fn load_kind_editor(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, k: &mut LoadKind) -> bool {
+    let mut changed = false;
+    egui::ComboBox::from_id_salt(("load_kind", &id)).selected_text(k.label()).width(210.0).show_ui(ui, |ui| {
+        let l_now = antan_core::loading::inductance(k).or(match *k {
+            LoadKind::Trap { l, .. } => Some(l),
+            _ => None,
+        });
+        let l = l_now.unwrap_or(5e-6);
+        for opt in [
+            LoadKind::SeriesRlc { r: 0.0, l, c: 0.0 },
+            LoadKind::ParallelRlc { r: 0.0, l, c: 100e-12 },
+            LoadKind::Trap { l, resonance: 7.1e6, q: 150.0 },
+            LoadKind::Fixed { r: 0.0, x: 0.0 },
+        ] {
+            if ui.selectable_label(std::mem::discriminant(k) == std::mem::discriminant(&opt), opt.label()).clicked() && std::mem::discriminant(k) != std::mem::discriminant(&opt) {
+                *k = opt;
+                changed = true;
+            }
+        }
+    });
+    ui.horizontal_wrapped(|ui| match k {
+        LoadKind::SeriesRlc { r, l, c } | LoadKind::ParallelRlc { r, l, c } => {
+            ui.label("R");
+            changed |= unit_value(ui, r, 1.0, 0.1, " Ω");
+            ui.label("L");
+            changed |= unit_value(ui, l, 1e6, 0.01, " µH");
+            ui.label("C");
+            changed |= unit_value(ui, c, 1e12, 0.5, " pF");
+        }
+        LoadKind::Trap { l, resonance, q } => {
+            ui.label("L");
+            changed |= unit_value(ui, l, 1e6, 0.01, " µH");
+            ui.label("f₀");
+            changed |= unit_value(ui, resonance, 1e-6, 0.005, " MHz");
+            ui.label("Q");
+            changed |= unit_value(ui, q, 1.0, 1.0, "");
+            ui.label(RichText::new(format!("C = {:.1} pF", LoadKind::trap_capacitance(*l, *resonance) * 1e12)).color(theme::TEXT_DIM));
+        }
+        LoadKind::Fixed { r, x } => {
+            ui.label("R");
+            changed |= unit_value(ui, r, 1.0, 0.1, " Ω");
+            ui.label("X");
+            let mut v = *x;
+            if ui.add(egui::DragValue::new(&mut v).speed(0.5).suffix(" Ω")).changed() {
+                *x = v;
+                changed = true;
+            }
+        }
+    });
+    if let LoadKind::SeriesRlc { c, .. } = k
+        && *c == 0.0
+    {
+        ui.label(RichText::new("C = 0: kondansatör yok (kısa devre).").small().color(theme::TEXT_DIM));
+    }
+    changed
+}
+
+fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
+    let f = app.project.model.frequency();
+    let title = match app.project.model {
+        Model::Yagi(_) => "Eleman yüklemeleri (bobin, tuzak)",
+        Model::Wires(_) => "Yüklemeler (bobin, kondansatör, tuzak)",
+    };
+    let mut tune: Option<usize> = None;
+    section(ui, title, false, |ui| {
+        let mut remove = None;
+        match &mut app.project.model {
+            Model::Yagi(d) => {
+                let names: Vec<String> = d.elements.iter().map(|e| e.name.clone()).collect();
+                for (i, ld) in d.loads.iter_mut().enumerate() {
+                    egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(format!("Yük {}", i + 1)).strong());
+                            egui::ComboBox::from_id_salt(("yl_el", i)).selected_text(names.get(ld.element).cloned().unwrap_or_default()).show_ui(ui, |ui| {
+                                for (k, n) in names.iter().enumerate() {
+                                    ui.selectable_value(&mut ld.element, k, n);
+                                }
+                            });
+                            if ui.small_button("🗑").clicked() {
+                                remove = Some(i);
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Konum (ortadan uca)");
+                            ui.add(egui::Slider::new(&mut ld.position, 0.0..=1.0).max_decimals(3));
+                        });
+                        ui.label(RichText::new(if ld.position < 1e-9 { "Ortada tek yük (sürülen elemanda beslemeyle seri)." } else { "İki kolda simetrik birer yük." }).small().color(theme::TEXT_DIM));
+                        load_kind_editor(ui, ("y", i), &mut ld.kind);
+                        let z = ld.kind.impedance(f);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(format!("Z({:.3} MHz) = {}", f / 1e6, crate::viz::fmt_z(z))).color(theme::ACCENT));
+                            if antan_core::loading::inductance(&ld.kind).is_some() && ui.small_button("L'yi rezonansa ayarla").clicked() {
+                                tune = Some(i);
+                            }
+                        });
+                    });
+                }
+                if let Some(i) = remove {
+                    d.loads.remove(i);
+                }
+                if ui.button("+ Yük ekle").clicked() {
+                    d.loads.push(ElementLoad { element: d.driven, position: 0.5, kind: LoadKind::SeriesRlc { r: 0.0, l: 2e-6, c: 0.0 } });
+                }
+            }
+            Model::Wires(a) => {
+                let names: Vec<String> = a.wires.iter().map(|w| w.name.clone()).collect();
+                for (i, ld) in a.loads.iter_mut().enumerate() {
+                    egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(format!("Yük {}", i + 1)).strong());
+                            egui::ComboBox::from_id_salt(("wl_w", i)).selected_text(names.get(ld.wire).cloned().unwrap_or_default()).show_ui(ui, |ui| {
+                                for (k, n) in names.iter().enumerate() {
+                                    ui.selectable_value(&mut ld.wire, k, n);
+                                }
+                            });
+                            if ui.small_button("🗑").clicked() {
+                                remove = Some(i);
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Konum");
+                            ui.add(egui::Slider::new(&mut ld.position, 0.0..=1.0).max_decimals(3));
+                            if ui.small_button("orta").clicked() {
+                                ld.position = 0.5;
+                            }
+                        });
+                        load_kind_editor(ui, ("w", i), &mut ld.kind);
+                        let z = ld.kind.impedance(f);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(format!("Z({:.3} MHz) = {}", f / 1e6, crate::viz::fmt_z(z))).color(theme::ACCENT));
+                            if antan_core::loading::inductance(&ld.kind).is_some() && ui.small_button("L'yi rezonansa ayarla").clicked() {
+                                tune = Some(i);
+                            }
+                        });
+                    });
+                }
+                if let Some(i) = remove {
+                    a.loads.remove(i);
+                }
+                if ui.button("+ Yük ekle").clicked() {
+                    let w = app.selected.min(a.wires.len().saturating_sub(1));
+                    a.loads.push(Load { wire: w, position: 0.5, kind: LoadKind::SeriesRlc { r: 0.0, l: 2e-6, c: 0.0 } });
+                }
+            }
+        }
+        ui.label(
+            RichText::new("Yük, en yakın düğüme seri empedans olarak girer (NEC LD kartları gibi). Uca konan yük o uç başka tek bir telle birleşiyorsa geçerlidir. Bobin kaybı için seri R ya da tuzakta Q kullanın; kayıp verime yansır.")
+                .small()
+                .color(theme::TEXT_DIM),
+        );
+    });
+    if let Some(i) = tune {
+        tune_load(app, i);
+    }
+}
+
+/// Seçilen yükün endüktansını besleme reaktansı 0 olana kadar ayarlar.
+fn tune_load(app: &mut AntAnApp, i: usize) {
+    use antan_core::loading::{inductance, set_inductance, tune_inductance};
+    let result = match &app.project.model {
+        Model::Wires(a) => antan_core::loading::tune_load_inductance(a, i, 0.0),
+        Model::Yagi(d) => {
+            let f = d.frequency;
+            let start = d.loads.get(i).and_then(|l| inductance(&l.kind));
+            start.and_then(|l0| {
+                tune_inductance(l0, 0.0, |l| {
+                    let mut d2 = d.clone();
+                    set_inductance(&mut d2.loads[i].kind, l);
+                    antan_core::solver::solve(&d2.build(), f).ok().map(|s| s.impedance())
+                })
+            })
+        }
+    };
+    match result {
+        Some((l, z)) => {
+            match &mut app.project.model {
+                Model::Wires(a) => set_inductance(&mut a.loads[i].kind, l),
+                Model::Yagi(d) => set_inductance(&mut d.loads[i].kind, l),
+            }
+            app.status = format!("Yük {}: L = {:.3} µH, Z = {}", i + 1, l * 1e6, crate::viz::fmt_z(z));
+        }
+        None => app.status = format!("Yük {} ayarlanamadı (yakınsamadı ya da çözüm yok)", i + 1),
+    }
 }
 
 fn mount_combo(ui: &mut egui::Ui, id: &str, m: &mut BoomMount) {

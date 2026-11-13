@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::C0;
-use crate::geometry::{Antenna, Ground};
+use crate::geometry::{Antenna, Ground, Load, LoadKind};
 use crate::material::Material;
 use crate::templates::{Tube, source, wire};
 
@@ -75,6 +75,18 @@ pub struct YagiDesign {
     /// Bum ve elemanların bağlanış biçimi (yalnız kesim boyunu etkiler).
     #[serde(default)]
     pub boom: Boom,
+    /// Elemanlara yerleştirilen toplu yükler (bobin, tuzak…).
+    #[serde(default)]
+    pub loads: Vec<ElementLoad>,
+}
+
+/// Bir Yagi elemanına simetrik yerleştirilen yük.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ElementLoad {
+    pub element: usize,
+    /// Ortadan uca konum, yarı boyun kesri (0 = orta: tek yük; > 0: iki kolda birer yük).
+    pub position: f64,
+    pub kind: LoadKind,
 }
 
 impl YagiDesign {
@@ -92,7 +104,7 @@ impl YagiDesign {
             let len = (0.445 - 0.006 * d as f64).max(0.40);
             elements.push(YagiElement { name: format!("Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
         }
-        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default() }
+        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default(), loads: Vec::new() }
     }
 
     pub fn boom_length(&self) -> f64 {
@@ -105,6 +117,7 @@ impl YagiDesign {
         let mut wires = Vec::new();
         let mut map = Vec::new();
         let mut feed = 0;
+        let mut loads = Vec::new();
         for (i, e) in self.elements.iter().enumerate() {
             let first = wires.len();
             let pieces = self.profile.pieces(0.5 * e.length.max(1e-4));
@@ -120,8 +133,25 @@ impl YagiDesign {
                 wires.push(wire(&format!("{} ·{} sol", e.name, k + 1), [x, -a, z], [x, -b, z], t));
             }
             map.push(first..wires.len());
+            for ld in self.loads.iter().filter(|l| l.element == i) {
+                let d = ld.position.clamp(0.0, 1.0) * 0.5 * e.length;
+                if d <= c_out + 1e-12 {
+                    if d < 1e-9 {
+                        loads.push(Load { wire: first, position: 0.5, kind: ld.kind });
+                    } else {
+                        let dt = d / (2.0 * c_out);
+                        loads.push(Load { wire: first, position: 0.5 + dt, kind: ld.kind });
+                        loads.push(Load { wire: first, position: 0.5 - dt, kind: ld.kind });
+                    }
+                } else if let Some(k) = pieces.iter().position(|&(a, b, _)| d > a && d <= b + 1e-12) {
+                    let (a, b, _) = pieces[k];
+                    let t = (d - a) / (b - a);
+                    loads.push(Load { wire: first + 2 * k - 1, position: t, kind: ld.kind });
+                    loads.push(Load { wire: first + 2 * k, position: t, kind: ld.kind });
+                }
+            }
         }
-        (Antenna { name: self.name.clone(), frequency: self.frequency, wires, sources: vec![source(feed, 0.5)], ground: self.ground }, map)
+        (Antenna { name: self.name.clone(), frequency: self.frequency, wires, sources: vec![source(feed, 0.5)], ground: self.ground, loads }, map)
     }
 
     pub fn build(&self) -> Antenna {

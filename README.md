@@ -47,6 +47,19 @@ dahil), 3B ışıma diyagramı, Smith abağı, eşleme hesapları ve otomatik iy
 
 ![Zemin üzerinde Yagi](docs/zemin-yagi-3b.png)
 
+**Yüklemeler (bobin, kondansatör, tuzak)**
+- Toplu yükler: seri RLC, paralel RLC, Q değeriyle tuzak (paralel LC, f₀), sabit R + jX. Tel içi
+  düğüme ya da iki telin birleştiği uca konur; düğümün öz empedansına seri girer (NEC LD gibi).
+- Yük kaybı verime yansır; 3B görünümde mor kare işaretçi; verim kartında yüklerdeki kayıp payı.
+- Yagi'de eleman yükleri: ortada tek yük ya da iki kolda simetrik çift (kısaltılmış HF Yagi).
+- **"L'yi rezonansa ayarla":** bobin endüktansı, gerçek çözücüyle besleme reaktansı sıfır olana
+  kadar yinelenir.
+- Şablonlar: W3DZZ tarzı tuzaklı 40/80 m dipol, ortadan bobin yüklü λ/8 dikey.
+
+| Bobin yüklü kısa dikey | Tuzaklı dipol 80 m |
+|---|---|
+| ![](docs/yuklu-dikey.png) | ![](docs/tuzakli-dipol.png) |
+
 **Bum düzeltmesi ve kesim listesi (Yagi)**
 - Bum: çap (yuvarlak/kare), et kalınlığı, malzeme, uç taşması; parazitik ve sürülen eleman için
   ayrı bağlanış: bumdan geçen temaslı, bumdan geçen yalıtılmış, düzeltmesiz (yalıtkan bum),
@@ -74,7 +87,7 @@ dahil), 3B ışıma diyagramı, Smith abağı, eşleme hesapları ve otomatik iy
   (sayısal konsol kiriş), rüzgâr alanı ve verilen hızda rüzgâr kuvveti.
 
 **Dosya**
-- Proje: `.antan` (JSON, okunabilir). NEC-2 kart dosyası dışa aktarımı (4nec2/xnec2c/EZNEC ile
+- Proje: `.antan` (JSON, okunabilir). NEC-2 kart dosyası dışa aktarımı (GW, GE/GN, LD, EX, FR, RP) (4nec2/xnec2c/EZNEC ile
   karşılaştırma için). Pencereyi PNG kaydetme. Geri al/yinele (Ctrl+Z / Ctrl+Y), Ctrl+O / Ctrl+S.
 - Bant düğmeleri (10 m … 23 cm), isteğe bağlı olarak geometriyi yeni frekansa ölçekler.
 
@@ -121,6 +134,9 @@ tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Testlerle doğrulananlar:
 - Kayıpsız antenlerde enerji korunumu (kazanç = yönlülük, ±0.05 dB) — birleşimli antenler dahil
 - GP tabanında Kirchhoff akım yasası; birleşimden besleme = ortadan besleme
 - Üç parçaya bölünmüş dipol = tek parça dipol
+- Yükler: beslemedeki seri yük empedansa birebir eklenir; dirençli yükte kazanç = yönlülük + verim;
+  tuzak rezonansta ≈ Q·ω₀·L; tuzaklı dipol iki bantta SWR < 2; simetrik yük çiftinde eşit akım;
+  %70 boylu, bobin yüklü 2 elemanlı Yagi ileri yönde > 5 dBi
 - Bum düzeltmesi: SM5BSZ tablosundaki örnek (19.05 mm bum, 144 MHz, yalıtılmış → +2.01 mm);
   kesim listesi toplamının elektriksel boy + düzeltmeye eşitliği
 - Zemin: kusursuz zemin sonucu = serbest uzayda elle kurulmuş "anten + görüntü" çifti (yatay ve
@@ -135,13 +151,13 @@ ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
 
 Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
 bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
-`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1` ek seçeneklerdir.
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1` ek seçeneklerdir.
 
 ## Yol haritası
 
 - Gerçek zeminin akımlara etkisi (Sommerfeld/Norton) ve toprak kaybının empedansa yansıması
 - Gömülü radyal sistemi kaybı tahmini
-- Yüklemeler (bobin/kondansatör/trap), çoklu kaynak ve faz besleme, yığınlama (stacking)
+- Çoklu kaynak ve faz besleme, yığınlama (stacking)
 - MMANA `.maa` ve NEC içe aktarma; PDF/HTML rapor
 - Türkçe/İngilizce dil seçeneği
 

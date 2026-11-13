@@ -43,6 +43,7 @@ pub enum SolveError {
     DegenerateWire(usize),
     BadSource(usize),
     BelowGround(usize),
+    BadLoad(usize),
     Singular,
 }
 
@@ -54,6 +55,7 @@ impl std::fmt::Display for SolveError {
             Self::DegenerateWire(i) => write!(f, "{}. telin boyu ya da çapı geçersiz", i + 1),
             Self::BadSource(i) => write!(f, "{}. kaynak geçerli bir noktada değil (serbest uç ya da olmayan tel)", i + 1),
             Self::BelowGround(i) => write!(f, "{}. tel zeminin (z = 0) altına iniyor; yüksekliği artırın", i + 1),
+            Self::BadLoad(i) => write!(f, "{}. yük geçerli bir noktada değil (serbest uç, çoklu birleşim ya da olmayan tel)", i + 1),
             Self::Singular => write!(f, "Empedans matrisi tekil; geometri çözülemedi"),
         }
     }
@@ -140,6 +142,18 @@ pub struct Feed {
     pub pos: Vec3,
 }
 
+/// Bir yükün sonucu.
+#[derive(Clone, Debug)]
+pub struct LoadResult {
+    pub pos: Vec3,
+    /// Yük empedansı (bu frekansta).
+    pub impedance: Complex64,
+    /// Yükten geçen akım.
+    pub current: Complex64,
+    /// Yükte harcanan güç (W).
+    pub power: f64,
+}
+
 #[derive(Clone, Debug)]
 pub struct Solution {
     pub frequency: f64,
@@ -156,6 +170,7 @@ pub struct Solution {
     /// Tel sayısı.
     pub wire_count: usize,
     pub ground: Ground,
+    pub loads: Vec<LoadResult>,
 }
 
 impl Solution {
@@ -338,7 +353,7 @@ fn source_bases(antenna: &Antenna, mesh: &Mesh, si: usize) -> Result<(Vec<(usize
     let src = &antenna.sources[si];
     let w = antenna.wires.get(src.wire).ok_or(SolveError::BadSource(si))?;
     let (first, m) = mesh.wire_first[src.wire];
-    let node = (src.position.clamp(0.0, 1.0) * m as f64).round() as usize;
+    let node = (src.position.clamp(0.0, 1.0) * m as f64).round_ties_even() as usize;
     if node >= 1 && node < m {
         let idx = first + node - 1;
         return Ok((vec![(idx, 1.0)], mesh.basis[idx].pos));
@@ -357,6 +372,31 @@ fn source_bases(antenna: &Antenna, mesh: &Mesh, si: usize) -> Result<(Vec<(usize
         return Err(SolveError::BadSource(si));
     }
     Ok((out, if node == 0 { w.start } else { w.end }))
+}
+
+/// Bir yükün oturduğu taban: tel içi düğüm ya da iki telin birleştiği uç.
+fn load_basis(antenna: &Antenna, mesh: &Mesh, li: usize) -> Result<(usize, f64), SolveError> {
+    let ld = &antenna.loads[li];
+    if ld.wire >= antenna.wires.len() {
+        return Err(SolveError::BadLoad(li));
+    }
+    let (first, m) = mesh.wire_first[ld.wire];
+    let node = (ld.position.clamp(0.0, 1.0) * m as f64).round_ties_even() as usize;
+    if node >= 1 && node < m {
+        return Ok((first + node - 1, 1.0));
+    }
+    let t_end = if node == 0 { 0.0 } else { 1.0 };
+    let hits: Vec<(usize, f64)> = mesh
+        .basis
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| b.junction && !b.ground)
+        .flat_map(|(i, b)| b.touch.iter().filter(|t| t.0 == ld.wire && (t.1 - t_end).abs() < 1e-9).map(move |t| (i, t.2)).collect::<Vec<_>>())
+        .collect();
+    match hits.as_slice() {
+        [one] => Ok(*one),
+        _ => Err(SolveError::BadLoad(li)),
+    }
 }
 
 /// Kaynak tarafı: akım yarıları ve yük parçaları (işaretli).
@@ -443,6 +483,15 @@ pub fn solve(antenna: &Antenna, frequency: f64) -> Result<Solution, SolveError> 
         z_int.push(zi);
     }
 
+    // Toplu yükler: düğümde seri empedans → öz empedansa eklenir.
+    let mut load_map = Vec::with_capacity(antenna.loads.len());
+    for li in 0..antenna.loads.len() {
+        let (idx, sign) = load_basis(antenna, &mesh, li)?;
+        let zl = antenna.loads[li].kind.impedance(frequency);
+        z[idx * n + idx] += zl;
+        load_map.push((idx, sign, zl));
+    }
+
     let mut v = vec![Complex64::new(0.0, 0.0); n];
     let mut feed_map = Vec::new();
     for si in 0..antenna.sources.len() {
@@ -468,10 +517,17 @@ pub fn solve(antenna: &Antenna, frequency: f64) -> Result<Solution, SolveError> 
         })
         .collect();
     let input_power = feeds.iter().map(|f| 0.5 * (f.voltage * f.current.conj()).re).sum();
-    let loss_power = currents.iter().zip(&z_int).map(|(i, zi)| 0.5 * i.norm_sqr() * zi.re).sum();
+    let loads: Vec<LoadResult> = load_map
+        .iter()
+        .map(|&(idx, sign, zl)| {
+            let current = currents[idx] * sign;
+            LoadResult { pos: basis[idx].pos, impedance: zl, current, power: 0.5 * current.norm_sqr() * zl.re }
+        })
+        .collect();
+    let loss_power = currents.iter().zip(&z_int).map(|(i, zi)| 0.5 * i.norm_sqr() * zi.re).sum::<f64>() + loads.iter().map(|l| l.power).sum::<f64>();
     let elements = basis.iter().enumerate().flat_map(|(i, b)| b.current_halves().into_iter().map(move |s| (i, s.mid(), scale(s.dir, s.len)))).collect();
 
-    Ok(Solution { frequency, basis: mesh.basis, currents, elements, feeds, input_power, loss_power, wire_count: antenna.wires.len(), ground: antenna.ground })
+    Ok(Solution { frequency, basis: mesh.basis, currents, elements, feeds, input_power, loss_power, wire_count: antenna.wires.len(), ground: antenna.ground, loads })
 }
 
 /// `start`..`stop` (Hz) arasında `points` noktada giriş empedansını hesaplar.

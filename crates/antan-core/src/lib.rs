@@ -8,6 +8,7 @@
 pub mod farfield;
 pub mod geometry;
 pub mod linalg;
+pub mod loading;
 pub mod matching;
 pub mod material;
 pub mod mechanics;

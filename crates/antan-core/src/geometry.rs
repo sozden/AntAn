@@ -81,6 +81,78 @@ pub struct Source {
     pub voltage: Complex64,
 }
 
+/// Toplu yük türleri. Birimler SI: ohm, henry, farad, hertz.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum LoadKind {
+    /// Seri R + L + C. `c = 0` kondansatör yok (kısa devre) demektir.
+    SeriesRlc { r: f64, l: f64, c: f64 },
+    /// Paralel R ∥ L ∥ C. Sıfır değerli eleman yok sayılır (R = 0 → direnç yok).
+    ParallelRlc { r: f64, l: f64, c: f64 },
+    /// Tuzak: paralel LC, `resonance` frekansında rezonansta; bobin kaybı Q ile.
+    Trap { l: f64, resonance: f64, q: f64 },
+    /// Frekanstan bağımsız R + jX.
+    Fixed { r: f64, x: f64 },
+}
+
+impl LoadKind {
+    /// `frequency` (Hz) frekansındaki empedans.
+    pub fn impedance(&self, frequency: f64) -> Complex64 {
+        let w = 2.0 * std::f64::consts::PI * frequency;
+        let j = Complex64::new(0.0, 1.0);
+        match *self {
+            LoadKind::SeriesRlc { r, l, c } => {
+                let mut z = Complex64::new(r, w * l);
+                if c > 0.0 {
+                    z += 1.0 / (j * w * c);
+                }
+                z
+            }
+            LoadKind::ParallelRlc { r, l, c } => {
+                let mut y = Complex64::new(0.0, w * c);
+                if r > 0.0 {
+                    y += 1.0 / r;
+                }
+                if l > 0.0 {
+                    y += 1.0 / (j * w * l);
+                }
+                // Hiç eleman yoksa açık devre: çok büyük empedans.
+                if y.norm() < 1e-15 { Complex64::new(1e12, 0.0) } else { 1.0 / y }
+            }
+            LoadKind::Trap { l, resonance, q } => {
+                let w0 = 2.0 * std::f64::consts::PI * resonance;
+                let c = 1.0 / (w0 * w0 * l);
+                let zl = Complex64::new(if q > 0.0 { w * l / q } else { 0.0 }, w * l);
+                let zc = 1.0 / (j * w * c);
+                zl * zc / (zl + zc)
+            }
+            LoadKind::Fixed { r, x } => Complex64::new(r, x),
+        }
+    }
+    pub fn label(&self) -> &'static str {
+        match self {
+            LoadKind::SeriesRlc { .. } => "Seri RLC (bobin/kondansatör)",
+            LoadKind::ParallelRlc { .. } => "Paralel RLC",
+            LoadKind::Trap { .. } => "Tuzak (paralel LC, Q)",
+            LoadKind::Fixed { .. } => "Sabit R + jX",
+        }
+    }
+    /// Tuzak kondansatörü (F).
+    pub fn trap_capacitance(l: f64, resonance: f64) -> f64 {
+        let w0 = 2.0 * std::f64::consts::PI * resonance;
+        1.0 / (w0 * w0 * l)
+    }
+}
+
+/// Bir tele yerleştirilmiş toplu yük.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Load {
+    pub wire: usize,
+    /// Tel boyunca konum 0..1; en yakın düğüme yerleşir. Uçta ise o uç başka
+    /// tek bir telle birleşmiş olmalıdır.
+    pub position: f64,
+    pub kind: LoadKind,
+}
+
 /// Zemin modeli. Zemin z = 0 düzlemidir; teller z ≥ 0'da olmalıdır.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum Ground {
@@ -130,11 +202,13 @@ pub struct Antenna {
     pub sources: Vec<Source>,
     #[serde(default)]
     pub ground: Ground,
+    #[serde(default)]
+    pub loads: Vec<Load>,
 }
 
 impl Antenna {
     pub fn new(name: impl Into<String>, frequency: f64, wires: Vec<Wire>, sources: Vec<Source>) -> Self {
-        Self { name: name.into(), frequency, wires, sources, ground: Ground::FreeSpace }
+        Self { name: name.into(), frequency, wires, sources, ground: Ground::FreeSpace, loads: Vec::new() }
     }
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("anten JSON'a çevrilemedi")

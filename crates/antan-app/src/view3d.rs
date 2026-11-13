@@ -272,6 +272,12 @@ fn draw_antenna(painter: &egui::Painter, ant: &Antenna, sol: Option<&Solution>, 
         }
     }
     if let Some(sol) = sol {
+        // Toplu yükler: mor kare (bobin/tuzak).
+        for l in &sol.loads {
+            let p = map(l.pos);
+            painter.rect_filled(egui::Rect::from_center_size(p, Vec2::splat(9.0)), 2.0, Color32::from_rgb(190, 120, 255));
+            painter.rect_stroke(egui::Rect::from_center_size(p, Vec2::splat(12.0)), 2.0, Stroke::new(1.2, Color32::WHITE), egui::StrokeKind::Middle);
+        }
         for f in &sol.feeds {
             let p = map(f.pos);
             painter.circle_filled(p, 5.0, theme::WARM);

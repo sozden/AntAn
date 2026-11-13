@@ -58,6 +58,23 @@ pub fn export(antenna: &Antenna, sweep: Option<(f64, f64, usize)>) -> String {
             let _ = writeln!(out, "LD 5 {} 0 0 {:.4e}", i + 1, w.material.conductivity);
         }
     }
+    // Toplu yükler (NEC yükü parça ortasına koyar; en yakın parça seçilir).
+    for ld in &antenna.loads {
+        let m = segs[ld.wire];
+        let seg = ((ld.position * m as f64).ceil() as usize).clamp(1, m);
+        let tag = ld.wire + 1;
+        let _ = match ld.kind {
+            crate::geometry::LoadKind::SeriesRlc { r, l, c } => writeln!(out, "LD 0 {tag} {seg} {seg} {r:.6e} {l:.6e} {c:.6e}"),
+            crate::geometry::LoadKind::ParallelRlc { r, l, c } => writeln!(out, "LD 1 {tag} {seg} {seg} {r:.6e} {l:.6e} {c:.6e}"),
+            crate::geometry::LoadKind::Trap { l, resonance, q } => {
+                // Paralel eşdeğer: Rp = Q·ω0·L (rezonans çevresinde geçerli).
+                let c = crate::geometry::LoadKind::trap_capacitance(l, resonance);
+                let rp = if q > 0.0 { q * 2.0 * std::f64::consts::PI * resonance * l } else { 0.0 };
+                writeln!(out, "LD 1 {tag} {seg} {seg} {rp:.6e} {l:.6e} {c:.6e}")
+            }
+            crate::geometry::LoadKind::Fixed { r, x } => writeln!(out, "LD 4 {tag} {seg} {seg} {r:.6e} {x:.6e} 0"),
+        };
+    }
     for s in &antenna.sources {
         let m = segs[s.wire];
         let seg = ((s.position * m as f64).ceil() as usize).clamp(1, m);

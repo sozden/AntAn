@@ -78,6 +78,8 @@ impl AntAnApp {
             Some("quad") => Project::template(Kind::Quad2, 144.3e6),
             Some("gp") => Project::template(Kind::GroundPlane, 145.0e6),
             Some("vertical") => Project::template(Kind::GroundVertical, 14.2e6),
+            Some("trap") => Project::template(Kind::TrapDipole, 3.65e6),
+            Some("loaded") => Project::template(Kind::LoadedVertical, 14.2e6),
             Some("yagi_ground") => {
                 let mut p = Project::yagi(144.3e6, 5);
                 if let Model::Yagi(d) = &mut p.model {
@@ -517,8 +519,9 @@ impl AntAnApp {
             "Verim ve boyut",
             format!("{:.2} %", sol.efficiency() * 100.0),
             format!(
-                "kayıp {:.3} dB · {:.0} × {:.0} × {:.0} mm (X·Y·Z), en büyük {:.2} λ",
+                "kayıp {:.3} dB{} · {:.0} × {:.0} × {:.0} mm (X·Y·Z), en büyük {:.2} λ",
                 -10.0 * sol.efficiency().max(1e-9).log10(),
+                if sol.loads.is_empty() { String::new() } else { format!(" (yüklerde %{:.1})", sol.loads.iter().map(|l| l.power).sum::<f64>() / sol.input_power * 100.0) },
                 (hi[0] - lo[0]) * 1e3,
                 (hi[1] - lo[1]) * 1e3,
                 (hi[2] - lo[2]) * 1e3,

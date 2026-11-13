@@ -129,6 +129,7 @@ impl Project {
         let tube = match kind {
             templates::Kind::Quad2 | templates::Kind::DeltaLoop | templates::Kind::Moxon => Tube::aluminum(0.004, None),
             templates::Kind::GroundPlane => Tube::aluminum(0.008, Some(0.001)),
+            templates::Kind::TrapDipole => Tube { diameter: 0.002, wall: None, material: antan_core::Material::copper() },
             _ => default_tube(),
         };
         let mut p = Self::with_model(Model::Wires(kind.build(frequency, &tube)));
@@ -137,6 +138,11 @@ impl Project {
         }
         if matches!(kind, templates::Kind::FoldedDipole) {
             p.z0 = 300.0;
+        }
+        if matches!(kind, templates::Kind::TrapDipole) {
+            // 80 m bandı (3.5–3.8 MHz); 40 m için bant düğmesi ya da frekans 7.1 MHz.
+            p.sweep_span_pct = 4.5;
+            p.z0 = 50.0;
         }
         p
     }

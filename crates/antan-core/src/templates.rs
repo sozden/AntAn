@@ -46,10 +46,12 @@ pub enum Kind {
     GroundPlane,
     Moxon,
     GroundVertical,
+    TrapDipole,
+    LoadedVertical,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 8] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon, Kind::GroundVertical];
+    pub const ALL: [Kind; 10] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon, Kind::GroundVertical, Kind::TrapDipole, Kind::LoadedVertical];
     pub fn label(self) -> &'static str {
         match self {
             Kind::Dipole => "Yarım dalga dipol",
@@ -60,6 +62,8 @@ impl Kind {
             Kind::GroundPlane => "Ground plane (GP)",
             Kind::Moxon => "Moxon dikdörtgeni",
             Kind::GroundVertical => "Çeyrek dalga dikey (zemine bağlı)",
+            Kind::TrapDipole => "Tuzaklı dipol 40/80 m (W3DZZ tarzı)",
+            Kind::LoadedVertical => "Bobin yüklü kısa dikey (λ/8)",
         }
     }
     pub fn build(self, frequency: f64, tube: &Tube) -> Antenna {
@@ -72,6 +76,8 @@ impl Kind {
             Kind::GroundPlane => ground_plane(frequency, 45.0, tube),
             Kind::Moxon => moxon(frequency, tube),
             Kind::GroundVertical => ground_vertical(frequency, tube),
+            Kind::TrapDipole => crate::loading::trap_dipole(tube),
+            Kind::LoadedVertical => crate::loading::loaded_vertical(frequency, tube),
         }
     }
 }
@@ -99,6 +105,7 @@ pub fn inverted_v(frequency: f64, included_deg: f64, tube: &Tube) -> Antenna {
         wires: vec![wire("Sol kol", [0.0; 3], tip(-1.0), tube), wire("Sağ kol", [0.0; 3], tip(1.0), tube)],
         sources: vec![source(0, 0.0)],
         ground: Default::default(),
+        loads: Vec::new(),
     }
 }
 
@@ -118,6 +125,7 @@ pub fn folded_dipole(frequency: f64, spacing_wl: f64, tube: &Tube) -> Antenna {
         ],
         sources: vec![source(0, 0.5)],
         ground: Default::default(),
+        loads: Vec::new(),
     }
 }
 
@@ -160,6 +168,7 @@ pub fn delta_loop(frequency: f64, tube: &Tube) -> Antenna {
         wires: vec![wire("Alt", a, b, tube), wire("Sağ", b, c, tube), wire("Sol", c, a, tube)],
         sources: vec![source(0, 0.5)],
         ground: Default::default(),
+        loads: Vec::new(),
     }
 }
 
@@ -208,6 +217,7 @@ pub fn moxon(frequency: f64, tube: &Tube) -> Antenna {
         ],
         sources: vec![source(3, 0.5)],
         ground: Default::default(),
+        loads: Vec::new(),
     }
 }
 
