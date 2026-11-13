@@ -47,6 +47,17 @@ dahil), 3B ışıma diyagramı, Smith abağı, eşleme hesapları ve otomatik iy
 
 ![Zemin üzerinde Yagi](docs/zemin-yagi-3b.png)
 
+**Bum düzeltmesi ve kesim listesi (Yagi)**
+- Bum: çap (yuvarlak/kare), et kalınlığı, malzeme, uç taşması; parazitik ve sürülen eleman için
+  ayrı bağlanış: bumdan geçen temaslı, bumdan geçen yalıtılmış, düzeltmesiz (yalıtkan bum),
+  kullanıcı tanımlı (ör. bum üstüne monte).
+- Düzeltme: G3SEK'in DL6WU ölçümlerine uydurduğu C = 25.195·B − 229·B² (B = bum çapı/λ,
+  C = bum çapının kesri, tüm eleman boyuna eklenir); yalıtılmış geçişte yarısı. B > 0.055 λ'da uyarı.
+- Tasarımdaki boylar **elektriksel** boydur (çözücü bunu kullanır); tabloda ayrıca **kesim boyu**.
+- **Kesim listesi:** her elemanın bölüm bölüm boruları (adet, kesim boyu, çap × et; geçme payı ve
+  uçta bum düzeltmesi dahil), boru türüne göre toplam ihtiyaç, panoya kopyalama.
+- Bum kütlesi ve rüzgâr yükü mekanik toplamlara eklenir; 3B görünümde bum çizilir.
+
 **Eşleme**
 - L devresi (tüm çözümler, kontrol empedansıyla), hairpin (beta) boyu ve endüktansı,
   gamma çubuğu boyu ve seri kondansatörü.
@@ -110,6 +121,8 @@ tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Testlerle doğrulananlar:
 - Kayıpsız antenlerde enerji korunumu (kazanç = yönlülük, ±0.05 dB) — birleşimli antenler dahil
 - GP tabanında Kirchhoff akım yasası; birleşimden besleme = ortadan besleme
 - Üç parçaya bölünmüş dipol = tek parça dipol
+- Bum düzeltmesi: SM5BSZ tablosundaki örnek (19.05 mm bum, 144 MHz, yalıtılmış → +2.01 mm);
+  kesim listesi toplamının elektriksel boy + düzeltmeye eşitliği
 - Zemin: kusursuz zemin sonucu = serbest uzayda elle kurulmuş "anten + görüntü" çifti (yatay ve
   dikey, 1e-6 içinde); λ/4 monopol = dipol/2 ve +3.01 dB; λ/2 yükseklikte yatay dipolün kalkış
   açısı 30° (8.4 dBi); gerçek zeminde dikey polarizasyonun ufukta sönmesi; çok iletken gerçek
@@ -122,13 +135,18 @@ ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
 
 Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
 bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
-`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground`, `ANTAN_AUTOSHOT_OPTIM=<adım>` ek seçeneklerdir.
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1` ek seçeneklerdir.
 
 ## Yol haritası
 
 - Gerçek zeminin akımlara etkisi (Sommerfeld/Norton) ve toprak kaybının empedansa yansıması
 - Gömülü radyal sistemi kaybı tahmini
-- Metal bum düzeltmesi (bumdan geçen / yalıtılmış elemanlar)
 - Yüklemeler (bobin/kondansatör/trap), çoklu kaynak ve faz besleme, yığınlama (stacking)
 - MMANA `.maa` ve NEC içe aktarma; PDF/HTML rapor
 - Türkçe/İngilizce dil seçeneği
+
+## Kaynaklar (bum düzeltmesi)
+
+- [SM5BSZ — Boom corrections from various sources](https://sm5bsz.com/antennas/sa/others.htm)
+- [YU1AW — Yagi boom correction](https://www.qsl.net/yu1aw/Misc/yagi_boom_correction.pdf)
+- [DK7ZB — Yagi details](https://www.qsl.net/d/dk7zb/2m-short/detail.htm)

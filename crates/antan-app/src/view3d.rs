@@ -72,7 +72,9 @@ pub fn toolbar(ui: &mut egui::Ui, v: &mut View3d) {
     });
 }
 
-pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_dbi: f64, antenna: &Antenna, sol: Option<&Solution>, highlight: &[usize], v: &mut View3d) {
+/// `boom`: varsa bumun iki ucu (m), çizim için.
+#[allow(clippy::too_many_arguments)]
+pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_dbi: f64, antenna: &Antenna, sol: Option<&Solution>, highlight: &[usize], boom: Option<([f64; 3], [f64; 3])>, v: &mut View3d) {
     let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
     if resp.dragged() {
         v.yaw += resp.drag_delta().x * 0.01;
@@ -141,7 +143,7 @@ pub fn show(ui: &mut egui::Ui, size: Vec2, pattern: Option<&Pattern>, max_gain_d
     }
 
     if v.show_antenna {
-        draw_antenna(&painter, antenna, sol, highlight, v, &to_screen);
+        draw_antenna(&painter, antenna, sol, highlight, boom, v, &to_screen);
     }
 
     // Köşe eksen göstergesi.
@@ -229,7 +231,7 @@ fn draw_surface(painter: &egui::Painter, pat: &Pattern, max_gain_dbi: f64, v: &V
     }
 }
 
-fn draw_antenna(painter: &egui::Painter, ant: &Antenna, sol: Option<&Solution>, highlight: &[usize], v: &View3d, to_screen: &dyn Fn(V3) -> Pos2) {
+fn draw_antenna(painter: &egui::Painter, ant: &Antenna, sol: Option<&Solution>, highlight: &[usize], boom: Option<([f64; 3], [f64; 3])>, v: &View3d, to_screen: &dyn Fn(V3) -> Pos2) {
     if ant.wires.is_empty() {
         return;
     }
@@ -243,6 +245,9 @@ fn draw_antenna(painter: &egui::Painter, ant: &Antenna, sol: Option<&Solution>, 
     let ext = (0..3).map(|i| hi[i] - lo[i]).fold(0.0, f64::max).max(1e-6);
     let s = 0.9 / ext;
     let map = |p: [f64; 3]| to_screen(cam([(p[0] - c[0]) * s, (p[1] - c[1]) * s, (p[2] - c[2]) * s], v.yaw, v.pitch));
+    if let Some((b0, b1)) = boom {
+        painter.line_segment([map(b0), map(b1)], Stroke::new(5.0, Color32::from_rgb(120, 128, 140)));
+    }
     let max_i = sol.map(|s| s.max_current()).unwrap_or(1.0).max(1e-15);
 
     for (wi, w) in ant.wires.iter().enumerate() {

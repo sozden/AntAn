@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::C0;
 use crate::geometry::{Antenna, Ground};
+use crate::material::Material;
 use crate::templates::{Tube, source, wire};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -71,6 +72,9 @@ pub struct YagiDesign {
     pub height: f64,
     #[serde(default)]
     pub ground: Ground,
+    /// Bum ve elemanların bağlanış biçimi (yalnız kesim boyunu etkiler).
+    #[serde(default)]
+    pub boom: Boom,
 }
 
 impl YagiDesign {
@@ -88,7 +92,7 @@ impl YagiDesign {
             let len = (0.445 - 0.006 * d as f64).max(0.40);
             elements.push(YagiElement { name: format!("Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
         }
-        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace }
+        Self { name: format!("{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default() }
     }
 
     pub fn boom_length(&self) -> f64 {
@@ -174,5 +178,190 @@ impl YagiDesign {
         if let Some((n, x, l)) = driven_name {
             self.driven = self.elements.iter().position(|e| e.name == n && e.x == x && e.length == l).unwrap_or(0);
         }
+    }
+}
+
+// ------------------------------------------------------------------ bum
+
+/// Elemanın bumla bağlantısı.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum BoomMount {
+    /// Bum yalıtkan (fiberglas, ahşap) ya da eleman bumdan uzakta: düzeltme yok.
+    None,
+    /// Eleman metal bumun içinden geçer ve bumla elektriksel temastadır.
+    ThroughBonded,
+    /// Eleman metal bumun içinden yalıtkan burçla geçer.
+    ThroughInsulated,
+    /// Kullanıcının verdiği düzeltme (m), ör. bum üstüne yalıtkanla monte.
+    Custom(f64),
+}
+
+impl BoomMount {
+    pub fn label(&self) -> &'static str {
+        match self {
+            BoomMount::None => "Düzeltme yok (yalıtkan bum / uzakta)",
+            BoomMount::ThroughBonded => "Bumdan geçen, temaslı",
+            BoomMount::ThroughInsulated => "Bumdan geçen, yalıtılmış",
+            BoomMount::Custom(_) => "Kullanıcı tanımlı",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Boom {
+    /// Dış çap (kare bumda kenar), m.
+    pub diameter: f64,
+    pub square: bool,
+    /// Et kalınlığı (m); kütle hesabı için.
+    pub wall: f64,
+    pub material: Material,
+    /// Parazitik elemanların bağlanışı.
+    pub mount: BoomMount,
+    /// Sürülen elemanın bağlanışı (çoğunlukla yalıtılmış ya da bumun üstünde).
+    pub driven_mount: BoomMount,
+    /// Bumun uç elemanlardan dışarı taşan kısmı, her uçta (m).
+    pub overhang: f64,
+    /// Kademeli borularda geçme payı (m): dış bölüm içtekine bu kadar girer.
+    pub overlap: f64,
+}
+
+impl Default for Boom {
+    fn default() -> Self {
+        Self {
+            diameter: 0.025,
+            square: false,
+            wall: 0.002,
+            material: Material::aluminum_6063(),
+            mount: BoomMount::ThroughBonded,
+            driven_mount: BoomMount::ThroughInsulated,
+            overhang: 0.03,
+            overlap: 0.03,
+        }
+    }
+}
+
+/// G3SEK'in DL6WU ölçümlerine uydurduğu bum düzeltmesi: bumdan geçen ve bumla
+/// temaslı elemanda tüm eleman boyuna eklenecek miktar, bum çapının kesri olarak.
+/// `b` bum çapı (dalga boyu). Ölçümler b < 0.055 λ için geçerlidir.
+/// Yalıtılmış geçişte bunun yarısı kullanılır (12.5975·b − 114.5·b², SM5BSZ).
+pub fn dl6wu_fraction(b: f64) -> f64 {
+    (25.195 * b - 229.0 * b * b).max(0.0)
+}
+
+/// DL6WU/G3SEK eğrisinin geçerli olduğu en büyük bum çapı (λ).
+pub const DL6WU_MAX_BOOM_WL: f64 = 0.055;
+
+impl Boom {
+    /// Bir bağlanış için tüm eleman boyuna eklenecek düzeltme (m).
+    pub fn correction(&self, mount: BoomMount, frequency: f64) -> f64 {
+        let b = self.diameter / (C0 / frequency);
+        let full = dl6wu_fraction(b) * self.diameter;
+        match mount {
+            BoomMount::None => 0.0,
+            BoomMount::ThroughBonded => full,
+            BoomMount::ThroughInsulated => 0.5 * full,
+            BoomMount::Custom(m) => m,
+        }
+    }
+    /// Bum çapı formülün ölçüm aralığında mı?
+    pub fn in_range(&self, frequency: f64) -> bool {
+        self.diameter / (C0 / frequency) <= DL6WU_MAX_BOOM_WL
+    }
+    /// Bum kütlesi (kg) ve rüzgâr alanı (m²), `length` bum boyu için.
+    pub fn mass_and_area(&self, length: f64) -> (f64, f64) {
+        let d = self.diameter;
+        let inner = (d - 2.0 * self.wall).max(0.0);
+        let section = if self.square { d * d - inner * inner } else { std::f64::consts::PI / 4.0 * (d * d - inner * inner) };
+        (section * length * self.material.density, d * length)
+    }
+}
+
+/// Kesim listesinin bir satırı.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CutPiece {
+    /// Parça açıklaması (ör. "orta", "2. bölüm", "uç").
+    pub label: String,
+    /// Adet (orta parça 1, yan parçalar 2).
+    pub count: usize,
+    pub tube: Tube,
+    /// Kesilecek boy (m), geçme payı ve uçta bum düzeltmesi dahil.
+    pub length: f64,
+}
+
+impl YagiDesign {
+    /// Elemanın bum düzeltmesi (m).
+    pub fn boom_correction(&self, i: usize) -> f64 {
+        let mount = if i == self.driven { self.boom.driven_mount } else { self.boom.mount };
+        self.boom.correction(mount, self.frequency)
+    }
+    /// Kesilecek uçtan uca boy: elektriksel boy + bum düzeltmesi.
+    pub fn cut_length(&self, i: usize) -> f64 {
+        self.elements[i].length + self.boom_correction(i)
+    }
+    /// Bum boyu (uç elemanlar arası + iki taraftaki taşma).
+    pub fn boom_total_length(&self) -> f64 {
+        self.boom_length() + 2.0 * self.boom.overhang
+    }
+    /// Bir elemanın boru kesim listesi. Düzeltme uç borularına eşit bölünür;
+    /// ortadan sonraki her bölüm geçme payı kadar uzun kesilir.
+    pub fn cut_list(&self, i: usize) -> Vec<CutPiece> {
+        let e = &self.elements[i];
+        let pieces = self.profile.pieces(0.5 * e.length);
+        let half_corr = 0.5 * self.boom_correction(i);
+        let last = pieces.len() - 1;
+        pieces
+            .iter()
+            .enumerate()
+            .map(|(k, &(a, b, t))| {
+                let extra = if k == last { half_corr } else { 0.0 };
+                if k == 0 {
+                    // Orta boru tek parçadır; tek bölümlü elemanda düzeltme iki uca da eklenir.
+                    CutPiece { label: if last == 0 { "tek parça".into() } else { "orta".into() }, count: 1, tube: t.clone(), length: 2.0 * (b + extra) }
+                } else {
+                    let label = if k == last { "uç".to_string() } else { format!("{}. bölüm", k + 1) };
+                    CutPiece { label, count: 2, tube: t.clone(), length: b - a + extra + self.boom.overlap }
+                }
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod boom_tests {
+    use super::*;
+
+    #[test]
+    fn dl6wu_reference_values() {
+        // Kaynak kontrolü: 0.01 λ bumda temaslı düzeltme bum çapının %22.9'u.
+        assert!((dl6wu_fraction(0.01) - 0.22905).abs() < 1e-9);
+        // SM5BSZ tablosu: 19.05 mm bum, 144 MHz, yalıtılmış → %10.56 → +2.01 mm.
+        let boom = Boom { diameter: 0.01905, mount: BoomMount::ThroughInsulated, ..Boom::default() };
+        let c = boom.correction(BoomMount::ThroughInsulated, 144.0e6);
+        assert!((c * 1000.0 - 2.01).abs() < 0.02, "{}", c * 1000.0);
+        assert!(boom.in_range(144.0e6));
+        assert!(!Boom { diameter: 0.2, ..Boom::default() }.in_range(144.0e6));
+    }
+
+    #[test]
+    fn cut_list_adds_correction_and_overlap() {
+        let tube = Tube::aluminum(0.012, Some(0.001));
+        let thin = Tube::aluminum(0.010, Some(0.001));
+        let mut d = YagiDesign::standard(144.3e6, 3, Profile { sections: vec![TaperSection { half_length: 0.2, tube }], tip: thin });
+        d.boom.overlap = 0.03;
+        let corr = d.boom_correction(0);
+        assert!(corr > 0.0);
+        let list = d.cut_list(0);
+        assert_eq!(list.len(), 2);
+        assert!((list[0].length - 0.4).abs() < 1e-12);
+        // Görünen toplam = elektriksel boy + düzeltme.
+        let visible = list[0].length + 2.0 * (list[1].length - d.boom.overlap);
+        assert!((visible - d.cut_length(0)).abs() < 1e-12);
+        // Tek parçalı eleman.
+        let u = YagiDesign::standard(144.3e6, 3, Profile::uniform(Tube::aluminum(0.01, None)));
+        let l = u.cut_list(2);
+        assert_eq!(l.len(), 1);
+        assert!((l[0].length - u.cut_length(2)).abs() < 1e-12);
+        // Sürülen eleman varsayılan olarak yalıtılmış: düzeltmesi parazitiğin yarısı.
+        assert!((u.boom_correction(1) - 0.5 * u.boom_correction(0)).abs() < 1e-15);
     }
 }

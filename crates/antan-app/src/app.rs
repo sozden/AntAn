@@ -540,7 +540,15 @@ impl AntAnApp {
                 _ => None,
             };
             let max_db = self.summary.map(|s| s.max_gain_dbi).unwrap_or(0.0);
-            view3d::show(ui, Vec2::new(w, avail.y - 4.0), self.pattern.as_ref(), max_db, &self.antenna, sol, &highlight, &mut self.view);
+            let boom = match &self.project.model {
+                Model::Yagi(d) => {
+                    let (lo, hi) = d.elements.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), e| (a.min(e.x), b.max(e.x)));
+                    let z = self.antenna.wires.first().map(|w| w.start[2]).unwrap_or(0.0);
+                    Some(([lo - d.boom.overhang, 0.0, z], [hi + d.boom.overhang, 0.0, z]))
+                }
+                Model::Wires(_) => None,
+            };
+            view3d::show(ui, Vec2::new(w, avail.y - 4.0), self.pattern.as_ref(), max_db, &self.antenna, sol, &highlight, boom, &mut self.view);
             ui.vertical(|ui| {
                 ui.set_width(240.0);
                 self.summary_cards(ui);

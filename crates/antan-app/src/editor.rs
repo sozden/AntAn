@@ -4,7 +4,7 @@ use eframe::egui::{self, Color32, RichText};
 
 use antan_core::mechanics::{self, cantilever_tip_sag, tube_props, wind_force};
 use antan_core::templates::{Tube, wire};
-use antan_core::yagi::{TaperSection, YagiDesign, YagiElement};
+use antan_core::yagi::{BoomMount, TaperSection, YagiDesign, YagiElement};
 use antan_core::{Antenna, C0, Material};
 
 use crate::app::AntAnApp;
@@ -14,6 +14,8 @@ use crate::theme;
 const MM: f64 = 1000.0;
 
 fn section(ui: &mut egui::Ui, title: &str, open: bool, add: impl FnOnce(&mut egui::Ui)) {
+    // Doğrulama çekimlerinde tüm bölümler açık gelsin.
+    let open = open || std::env::var_os("ANTAN_AUTOSHOT_OPEN_ALL").is_some();
     egui::CollapsingHeader::new(RichText::new(title).strong().color(Color32::WHITE)).default_open(open).show(ui, add);
 }
 
@@ -317,17 +319,19 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
     let lambda = C0 / d.frequency;
     section(ui, "Elemanlar", true, |ui| {
         let mut remove = None;
-        egui::Grid::new("elements").num_columns(5).striped(true).spacing([6.0, 4.0]).show(ui, |ui| {
+        egui::Grid::new("elements").num_columns(6).striped(true).spacing([6.0, 4.0]).show(ui, |ui| {
             ui.label(RichText::new("Bes.").small()).on_hover_text("Sürülen (beslenen) eleman");
             ui.label(RichText::new("Ad").small());
             ui.label(RichText::new("Bum konumu").small());
-            ui.label(RichText::new("Uçtan uca boy").small());
+            ui.label(RichText::new("Elektriksel boy").small()).on_hover_text("Çözücünün kullandığı, bum etkisi olmayan boy");
+            ui.label(RichText::new("Kesim boyu").small()).on_hover_text("Elektriksel boy + bum düzeltmesi");
             ui.label("");
             ui.end_row();
             for i in 0..d.elements.len() {
                 ui.radio_value(&mut d.driven, i, "");
+                let corr = d.boom_correction(i);
                 let e = &mut d.elements[i];
-                let r = ui.add_sized([108.0, 20.0], egui::TextEdit::singleline(&mut e.name));
+                let r = ui.add_sized([100.0, 20.0], egui::TextEdit::singleline(&mut e.name));
                 if i == selected {
                     r.highlight();
                 }
@@ -336,6 +340,8 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
                     mm_value(ui, &mut e.length, 0.5, 0.01..=60.0);
                     ui.label(RichText::new(format!("{:.3}λ", e.length / lambda)).small().color(theme::TEXT_DIM));
                 });
+                ui.label(RichText::new(format!("{:.1}", (e.length + corr) * MM)).color(if corr > 0.0 { theme::WARM } else { Color32::WHITE }))
+                    .on_hover_text(format!("Bum düzeltmesi: +{:.2} mm", corr * MM));
                 if ui.small_button("🗑").on_hover_text("Elemanı sil").clicked() {
                     remove = Some(i);
                 }
@@ -403,6 +409,129 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
             d.profile.sections.push(TaperSection { half_length: 0.1 * lambda, tube });
             // Dıştaki bölüm içtekinden ince olmalı: listeyi çapa göre azalan sırala.
             d.profile.sections.sort_by(|a, b| b.tube.diameter.partial_cmp(&a.tube.diameter).unwrap());
+        }
+    });
+
+    boom_section(ui, d);
+    cut_list_section(ui, d);
+}
+
+fn mount_combo(ui: &mut egui::Ui, id: &str, m: &mut BoomMount) {
+    egui::ComboBox::from_id_salt(id).selected_text(m.label()).width(220.0).show_ui(ui, |ui| {
+        for opt in [BoomMount::ThroughBonded, BoomMount::ThroughInsulated, BoomMount::None] {
+            if ui.selectable_label(*m == opt, opt.label()).clicked() {
+                *m = opt;
+            }
+        }
+        if ui.selectable_label(matches!(m, BoomMount::Custom(_)), "Kullanıcı tanımlı (ör. bum üstünde)").clicked() && !matches!(m, BoomMount::Custom(_)) {
+            *m = BoomMount::Custom(0.0);
+        }
+    });
+    if let BoomMount::Custom(v) = m {
+        ui.horizontal(|ui| {
+            ui.label("  ek boy");
+            mm_value(ui, v, 0.05, -0.1..=0.1);
+        });
+    }
+}
+
+fn boom_section(ui: &mut egui::Ui, d: &mut YagiDesign) {
+    let f = d.frequency;
+    let lambda = C0 / f;
+    section(ui, "Bum ve bum düzeltmesi", true, |ui| {
+        egui::Grid::new("boom").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(if d.boom.square { "Kenar" } else { "Dış çap" });
+            ui.horizontal(|ui| {
+                mm_value(ui, &mut d.boom.diameter, 0.2, 0.005..=0.3);
+                ui.checkbox(&mut d.boom.square, "kare profil");
+                ui.label(RichText::new(format!("{:.4} λ", d.boom.diameter / lambda)).small().color(theme::TEXT_DIM));
+            });
+            ui.end_row();
+            ui.label("Et kalınlığı");
+            mm_value(ui, &mut d.boom.wall, 0.05, 0.0005..=0.02);
+            ui.end_row();
+            ui.label("Malzeme");
+            material_combo(ui, "boom_mat", &mut d.boom.material);
+            ui.end_row();
+            ui.label("Parazitik elemanlar");
+            ui.vertical(|ui| mount_combo(ui, "mount_par", &mut d.boom.mount));
+            ui.end_row();
+            ui.label("Sürülen eleman");
+            ui.vertical(|ui| mount_combo(ui, "mount_drv", &mut d.boom.driven_mount));
+            ui.end_row();
+            ui.label("Uç taşması (her uç)");
+            mm_value(ui, &mut d.boom.overhang, 1.0, 0.0..=2.0);
+            ui.end_row();
+            ui.label("Geçme payı");
+            mm_value(ui, &mut d.boom.overlap, 1.0, 0.0..=0.3);
+            ui.end_row();
+        });
+        let cp = d.boom.correction(d.boom.mount, f);
+        let cd = d.boom.correction(d.boom.driven_mount, f);
+        ui.label(RichText::new(format!("Düzeltme: parazitik +{:.2} mm, sürülen +{:.2} mm · bum boyu {:.0} mm", cp * MM, cd * MM, d.boom_total_length() * MM)).strong());
+        if !d.boom.in_range(f) {
+            ui.label(RichText::new(format!("Uyarı: bum çapı {:.3} λ, DL6WU ölçümlerinin geçerli olduğu 0.055 λ'yı aşıyor.", d.boom.diameter / lambda)).color(theme::BAD));
+        }
+        ui.label(
+            RichText::new(
+                "Metal bum, içinden geçen elemanı elektriksel olarak kısaltır. Formül: G3SEK'in DL6WU ölçümlerine uydurduğu C = 25.195·B − 229·B² (B: bum çapı/λ, C: bum çapının kesri), yalıtılmış geçişte yarısı. Tasarımdaki boylar elektriksel boydur; kesim boyu düzeltme eklenmiş halidir. Bum üstüne yalıtkanla monte elemanlar için yayımlanmış formül yok; düzeltme küçüktür ve yükseklikle azalır — kullanıcı tanımlı değer girin.",
+            )
+            .small()
+            .color(theme::TEXT_DIM),
+        );
+    });
+}
+
+/// Kesim listesini düz metin olarak üretir (panoya kopyalamak için).
+pub fn cut_list_text(d: &YagiDesign) -> String {
+    let mut s = format!("{} — kesim listesi ({:.3} MHz)\n", d.name, d.frequency / 1e6);
+    s += &format!("Bum: Ø{:.1} mm, boy {:.0} mm\n\n", d.boom.diameter * MM, d.boom_total_length() * MM);
+    for (i, e) in d.elements.iter().enumerate() {
+        s += &format!("{}  (konum {:.1} mm, kesim boyu {:.1} mm)\n", e.name, e.x * MM, d.cut_length(i) * MM);
+        for p in d.cut_list(i) {
+            s += &format!("    {} × {:>8.1} mm  Ø{:.1}{}  {}\n", p.count, p.length * MM, p.tube.diameter * MM, p.tube.wall.map(|w| format!("×{:.1}", w * MM)).unwrap_or_else(|| " dolu".into()), p.label);
+        }
+    }
+    s
+}
+
+fn cut_list_section(ui: &mut egui::Ui, d: &YagiDesign) {
+    section(ui, "Kesim listesi", false, |ui| {
+        // Boru türüne göre toplam boy (alışveriş listesi).
+        let mut totals: Vec<(String, f64)> = Vec::new();
+        egui::Grid::new("cuts").num_columns(4).striped(true).spacing([10.0, 2.0]).show(ui, |ui| {
+            for h in ["Eleman / parça", "Adet", "Kesim", "Boru"] {
+                ui.label(RichText::new(h).small().color(theme::TEXT_DIM));
+            }
+            ui.end_row();
+            for (i, e) in d.elements.iter().enumerate() {
+                ui.label(RichText::new(&e.name).strong());
+                ui.label("");
+                ui.label(RichText::new(format!("{:.1} mm", d.cut_length(i) * MM)).strong());
+                ui.label("");
+                ui.end_row();
+                for p in d.cut_list(i) {
+                    let tube = format!("Ø{:.1}{}", p.tube.diameter * MM, p.tube.wall.map(|w| format!(" × {:.1}", w * MM)).unwrap_or_else(|| " dolu".into()));
+                    ui.label(format!("   {}", p.label));
+                    ui.label(format!("{}", p.count));
+                    ui.label(format!("{:.1} mm", p.length * MM));
+                    ui.label(&tube);
+                    ui.end_row();
+                    match totals.iter_mut().find(|t| t.0 == tube) {
+                        Some(t) => t.1 += p.length * p.count as f64,
+                        None => totals.push((tube, p.length * p.count as f64)),
+                    }
+                }
+            }
+        });
+        ui.separator();
+        ui.label(RichText::new("Toplam boru ihtiyacı (fire hariç)").strong());
+        for (t, l) in &totals {
+            ui.label(format!("  {t}: {:.2} m", l));
+        }
+        ui.label(format!("  Bum Ø{:.1} × {:.1}: {:.2} m", d.boom.diameter * MM, d.boom.wall * MM, d.boom_total_length()));
+        if ui.button("📋 Kesim listesini panoya kopyala").clicked() {
+            ui.ctx().copy_text(cut_list_text(d));
         }
     });
 }
@@ -539,6 +668,14 @@ fn mechanics_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                         ui.label(format!("{:.1} N", wind_force(area, v)));
                         ui.end_row();
                     }
+                    let (bm, ba) = d.boom.mass_and_area(d.boom_total_length());
+                    total_mass += bm;
+                    total_area += ba;
+                    ui.label(RichText::new("Bum").strong());
+                    ui.label(format!("{:.0} g", bm * 1000.0));
+                    ui.label(RichText::new("—").color(theme::TEXT_DIM));
+                    ui.label(format!("{:.1} N", wind_force(ba, v)));
+                    ui.end_row();
                 }
                 Model::Wires(a) => {
                     for w in &a.wires {
