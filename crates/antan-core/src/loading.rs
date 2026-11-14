@@ -20,6 +20,27 @@ pub fn tune_load_inductance(antenna: &Antenna, load: usize, target_x: f64) -> Op
     })
 }
 
+/// Birkaç yükün (ör. simetrik bobin çifti) endüktansını birlikte, aynı değerde ayarlar.
+pub fn tune_loads_inductance(antenna: &Antenna, loads: &[usize], target_x: f64) -> Option<(f64, Complex64)> {
+    let f = antenna.frequency;
+    let l_start = inductance(&antenna.loads.get(*loads.first()?)?.kind)?;
+    tune_inductance(l_start, target_x, |l| {
+        let mut a = antenna.clone();
+        for &i in loads {
+            set_inductance(&mut a.loads.get_mut(i)?.kind, l);
+        }
+        solve(&a, f).ok().map(|s| s.impedance())
+    })
+}
+
+/// Aynı endüktanslı, aynı teldeki ve tel ortasına göre simetrik yükü bulur.
+pub fn symmetric_partner(antenna: &Antenna, load: usize) -> Option<usize> {
+    let ld = antenna.loads.get(load)?;
+    antenna.loads.iter().enumerate().position(|(j, o)| {
+        j != load && o.wire == ld.wire && (o.position - (1.0 - ld.position)).abs() < 1e-6 && inductance(&o.kind).is_some() && inductance(&o.kind) == inductance(&ld.kind)
+    })
+}
+
 /// Seri/paralel RLC yükünün endüktansı (diğer türlerde `None`).
 pub fn inductance(k: &LoadKind) -> Option<f64> {
     match *k {
@@ -75,6 +96,25 @@ pub fn trap_dipole(tube: &Tube) -> Antenna {
     for w in &mut a.wires {
         w.start[2] = 15.0;
         w.end[2] = 15.0;
+    }
+    a
+}
+
+/// Bobinle kısaltılmış dipol: toplam boy `length_wl` (λ), her kolun ortasında
+/// birer bobin (Q = 200), bobinler rezonansa ayarlanır. Serbest uzayda.
+pub fn loaded_dipole(frequency: f64, length_wl: f64, tube: &Tube) -> Antenna {
+    let lambda = C0 / frequency;
+    let half = 0.5 * length_wl * lambda;
+    let mut w = wire(crate::i18n::t("Shortened dipole", "Kısaltılmış dipol"), [0.0, -half, 0.0], [0.0, half, 0.0], tube);
+    w.segments = 40;
+    let mut a = Antenna::new(crate::tf!("Coil-loaded dipole ({:.0} % length)", "Bobin yüklü dipol (boy %{:.0})", length_wl / 0.48 * 100.0), frequency, vec![w], vec![source(0, 0.5)]);
+    let coil = LoadKind::SeriesRlc { r: 0.0, l: 2.0 * lambda / C0 * 50.0, c: 0.0 };
+    a.loads = vec![Load { wire: 0, position: 0.25, kind: coil }, Load { wire: 0, position: 0.75, kind: coil }];
+    if let Some((l, _)) = tune_loads_inductance(&a, &[0, 1], 0.0) {
+        let r = 2.0 * std::f64::consts::PI * frequency * l / 200.0;
+        for ld in &mut a.loads {
+            ld.kind = LoadKind::SeriesRlc { r, l, c: 0.0 };
+        }
     }
     a
 }

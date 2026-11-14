@@ -1,0 +1,3 @@
+# Linux betikleri ve masaüstü dosyaları her sistemde LF satır sonuyla kalmalı.
+*.sh text eol=lf
+*.desktop.in text eol=lf

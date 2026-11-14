@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=AntAn
+GenericName=Antenna analysis
+GenericName[tr]=Anten analizi
+Comment=Antenna analysis and design (method of moments)
+Comment[tr]=Anten analiz ve hesaplama (moment yöntemi)
+Exec=@EXEC@
+Icon=antan
+Terminal=false
+Categories=Science;Engineering;HamRadio;
+Keywords=antenna;yagi;nec;ham;radio;anten;
+StartupWMClass=antan

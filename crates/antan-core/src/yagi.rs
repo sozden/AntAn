@@ -78,6 +78,11 @@ pub struct YagiDesign {
     /// Elemanlara yerleştirilen toplu yükler (bobin, tuzak…).
     #[serde(default)]
     pub loads: Vec<ElementLoad>,
+    /// LFA (G0KSC "Loop Fed Array"): sürülen eleman, eleman düzleminde yatan
+    /// dikdörtgen halkadır. Değer halkanın bum boyunca genişliği (m); eleman
+    /// boyu halkanın uzun kenarıdır. Besleme arka kenarın ortasından.
+    #[serde(default)]
+    pub driven_loop: Option<f64>,
 }
 
 /// Bir Yagi elemanına simetrik yerleştirilen yük.
@@ -104,7 +109,26 @@ impl YagiDesign {
             let len = (0.445 - 0.006 * d as f64).max(0.40);
             elements.push(YagiElement { name: crate::tf!("Director {}", "Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
         }
-        Self { name: crate::tf!("{n}-element Yagi", "{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default(), loads: Vec::new() }
+        Self { name: crate::tf!("{n}-element Yagi", "{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default(), loads: Vec::new(), driven_loop: None }
+    }
+
+    /// `n` elemanlı LFA Yagi başlangıç tasarımı (G0KSC tarzı halka beslemeli).
+    /// Halka boyutları ve aralıklar bu çözücüyle ~50 Ω'a taranmıştır; en iyi
+    /// sonuç için İyileştirme sekmesiyle ince ayar yapılması önerilir.
+    pub fn lfa(frequency: f64, n: usize, profile: Profile) -> Self {
+        let lambda = C0 / frequency;
+        let mut d = Self::standard(frequency, n, profile);
+        d.name = crate::tf!("{n}-element LFA Yagi", "{n} elemanlı LFA Yagi");
+        let p = lfa_params(d.elements.len());
+        d.elements[1].x = p.0 * lambda;
+        d.elements[1].length = p.1 * lambda;
+        d.elements[1].name = crate::i18n::t("Driven loop", "Sürülen halka").into();
+        d.driven_loop = Some(p.2 * lambda);
+        let shift = p.3 * lambda - d.elements.get(2).map(|e| e.x).unwrap_or(0.0);
+        for e in d.elements.iter_mut().skip(2) {
+            e.x += shift;
+        }
+        d
     }
 
     pub fn boom_length(&self) -> f64 {
@@ -126,6 +150,17 @@ impl YagiDesign {
             let (_, c_out, c_tube) = pieces[0];
             if i == self.driven {
                 feed = wires.len();
+                if let Some(w) = self.driven_loop.filter(|w| *w > 0.0) {
+                    // LFA halkası: arka kenar (beslenen), ön kenar ve iki kısa uç.
+                    let (xr, xf, h) = (x - 0.5 * w, x + 0.5 * w, 0.5 * e.length.max(1e-4));
+                    let t = c_tube;
+                    wires.push(wire(&crate::tf!("{} rear (fed)", "{} arka (beslenen)", e.name), [xr, -h, z], [xr, h, z], t));
+                    wires.push(wire(&crate::tf!("{} front", "{} ön", e.name), [xf, -h, z], [xf, h, z], t));
+                    wires.push(wire(&crate::tf!("{} end right", "{} sağ uç", e.name), [xr, h, z], [xf, h, z], t));
+                    wires.push(wire(&crate::tf!("{} end left", "{} sol uç", e.name), [xr, -h, z], [xf, -h, z], t));
+                    map.push(first..wires.len());
+                    continue;
+                }
             }
             wires.push(wire(&e.name, [x, -c_out, z], [x, c_out, z], c_tube));
             for (k, &(a, b, t)) in pieces.iter().enumerate().skip(1) {
@@ -156,6 +191,11 @@ impl YagiDesign {
 
     pub fn build(&self) -> Antenna {
         self.build_with_map().0
+    }
+
+    /// LFA halkasının genişliği (sürülen eleman halka değilse `None`).
+    pub fn loop_width(&self) -> Option<f64> {
+        self.driven_loop.filter(|w| *w > 0.0)
     }
 
     /// Sürülen elemanın boyunu, besleme reaktansı hedefe eşit olana kadar ayarlar
@@ -321,6 +361,9 @@ pub struct CutPiece {
 impl YagiDesign {
     /// Elemanın bum düzeltmesi (m).
     pub fn boom_correction(&self, i: usize) -> f64 {
+        if i == self.driven && self.loop_width().is_some() {
+            return 0.0;
+        }
         let mount = if i == self.driven { self.boom.driven_mount } else { self.boom.mount };
         self.boom.correction(mount, self.frequency)
     }
@@ -337,6 +380,14 @@ impl YagiDesign {
     pub fn cut_list(&self, i: usize) -> Vec<CutPiece> {
         let e = &self.elements[i];
         let pieces = self.profile.pieces(0.5 * e.length);
+        if let (true, Some(w)) = (i == self.driven, self.loop_width()) {
+            // LFA halkası: bum düzeltmesi uygulanmaz (halka genelde yalıtkanla monte edilir).
+            let t = pieces[0].2.clone();
+            return vec![
+                CutPiece { label: crate::i18n::t("loop long side (rear one split at feed)", "halka uzun kenar (arkadaki beslemede bölünür)").into(), count: 2, tube: t.clone(), length: e.length },
+                CutPiece { label: crate::i18n::t("loop end", "halka kısa kenar").into(), count: 2, tube: t, length: w },
+            ];
+        }
         let half_corr = 0.5 * self.boom_correction(i);
         let last = pieces.len() - 1;
         pieces
@@ -393,5 +444,20 @@ mod boom_tests {
         assert!((l[0].length - u.cut_length(2)).abs() < 1e-12);
         // Sürülen eleman varsayılan olarak yalıtılmış: düzeltmesi parazitiğin yarısı.
         assert!((u.boom_correction(1) - 0.5 * u.boom_correction(0)).abs() < 1e-15);
+    }
+}
+
+/// LFA başlangıç boyutları (λ): (halka merkezinin bum konumu, halka uzun kenarı,
+/// halka genişliği, ilk yönlendiricinin konumu). Eleman sayısına göre bu
+/// çözücüyle taranmıştır (examples/lfa_scan.rs): ~45–55 Ω, yönlendiriciler
+/// standart tasarımdan; Ö/A için İyileştirme sekmesi önerilir.
+fn lfa_params(n: usize) -> (f64, f64, f64, f64) {
+    match n {
+        0..=3 => (0.12, 0.42, 0.08, 0.30),
+        4 => (0.08, 0.42, 0.06, 0.22),
+        5 => (0.12, 0.40, 0.10, 0.26),
+        6 => (0.10, 0.44, 0.04, 0.30),
+        7 | 8 => (0.08, 0.42, 0.06, 0.22),
+        _ => (0.10, 0.42, 0.06, 0.30),
     }
 }

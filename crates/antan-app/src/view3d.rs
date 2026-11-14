@@ -283,6 +283,24 @@ fn draw_antenna(painter: &egui::Painter, ant: &Antenna, sol: Option<&Solution>, 
             painter.circle_stroke(p, 7.5, Stroke::new(1.5, theme::WARM));
         }
     }
+    // Serbest uçlar arası boşluk ölçüsü (ör. Moxon kuyrukları), uçlar arası kesikli çizgi + etiket.
+    let lambda = antan_core::C0 / ant.frequency;
+    let gaps = antan_core::templates::open_end_gaps(ant, 0.25 * lambda);
+    if gaps.len() <= 6 {
+        for (i, j, d) in gaps {
+            let (wi, wj) = (&ant.wires[i], &ant.wires[j]);
+            let best = [wi.start, wi.end].into_iter().flat_map(|p| [wj.start, wj.end].into_iter().map(move |q| (p, q))).min_by(|a, b| dist3(a.0, a.1).total_cmp(&dist3(b.0, b.1)));
+            let Some((p, q)) = best else { continue };
+            let (a, b) = (map(p), map(q));
+            painter.extend(Shape::dashed_line(&[a, b], Stroke::new(1.5, theme::WARM), 4.0, 3.0));
+            let mid = a + (b - a) * 0.5;
+            painter.text(mid + Vec2::new(8.0, -8.0), egui::Align2::LEFT_BOTTOM, format!("{:.1} mm", d * 1e3), theme::plot_font(11.0), theme::WARM);
+        }
+    }
+}
+
+fn dist3(p: [f64; 3], q: [f64; 3]) -> f64 {
+    ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt()
 }
 
 fn color_bar(painter: &egui::Painter, r: Rect, max_gain_dbi: f64, range: f64) {

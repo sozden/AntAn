@@ -198,11 +198,40 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
             ui.add(egui::TextEdit::singleline(app.project.model.name_mut()).desired_width(170.0));
             ui.end_row();
             ui.label(tl("Frequency", "Frekans"));
+            use antan_core::bands;
             let mut mhz = app.project.model.frequency() / 1e6;
-            if ui.add(egui::DragValue::new(&mut mhz).range(0.1..=30_000.0).speed(0.01).max_decimals(4).suffix(" MHz")).changed() {
-                app.project.model.set_frequency(mhz * 1e6);
-            }
+            ui.horizontal(|ui| {
+                if ui
+                    .add(egui::DragValue::new(&mut mhz).range(bands::MIN_FREQ / 1e6..=bands::MAX_FREQ / 1e6).speed(0.01).max_decimals(4).suffix(" MHz"))
+                    .on_hover_text(tl("0.1 … 3000 MHz. Changing the frequency does not resize the antenna; use the Band menu with “scale” or the button on the right for that.", "0.1 … 3000 MHz. Frekansı değiştirmek anteni yeniden boyutlandırmaz; bunun için Bant menüsünü “ölçekle” ile ya da sağdaki düğmeyi kullanın."))
+                    .changed()
+                {
+                    app.project.model.set_frequency(mhz * 1e6);
+                }
+                match bands::band_of(mhz * 1e6) {
+                    Some(b) => ui.label(RichText::new(b.name).color(theme::ACCENT)),
+                    None => ui.label(RichText::new(tl("outside ham bands", "amatör bant dışı")).small().color(theme::TEXT_DIM)),
+                };
+            });
             ui.end_row();
+            // Frekans, geometrinin tasarlandığı frekanstan çok uzaksa ölçekleme önerisi.
+            let lambda = C0 / app.project.model.frequency();
+            let biggest = app.project.model.largest_dimension();
+            let off = app.project.design_frequency().map(|g| (g / app.project.model.frequency()).ln().abs() > 0.25_f64.ln_1p()).unwrap_or(false);
+            if biggest > 4.0 * lambda || biggest < 0.05 * lambda || off {
+                ui.label("");
+                ui.vertical(|ui| {
+                    let msg = match app.project.design_frequency() {
+                        Some(g) => tf!("Geometry is sized for {:.3} MHz (largest dimension {:.2} λ here).", "Geometri {:.3} MHz için boyutlu (burada en büyük boyut {:.2} λ).", g / 1e6, biggest / lambda),
+                        None => tf!("The antenna is {:.2} λ at this frequency.", "Anten bu frekansta {:.2} λ.", biggest / lambda),
+                    };
+                    ui.label(RichText::new(msg).small().color(theme::WARM));
+                    if app.project.design_frequency().is_some() && ui.small_button(tl("Scale the antenna to this frequency", "Anteni bu frekansa ölçekle")).clicked() {
+                        app.project.scale_to_frequency();
+                    }
+                });
+                ui.end_row();
+            }
             ui.label(tl("Wavelength", "Dalga boyu"));
             ui.label(format!("{:.1} mm", C0 / app.project.model.frequency() * MM));
             ui.end_row();
@@ -250,7 +279,20 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                 1 => Ground::Perfect,
                 _ => Ground::Real { permittivity: 13.0, conductivity: 0.005 },
             };
+            // Serbest uzaydan zemine geçerken z ≈ 0'da (ya da altında) duran tel modelini
+            // makul bir yüksekliğe kaldır: λ/2, en çok 10 m.
+            if kind == 0
+                && let Model::Wires(a) = &mut app.project.model
+            {
+                let lo = a.wires.iter().flat_map(|w| [w.start[2], w.end[2]]).fold(f64::INFINITY, f64::min);
+                if lo < 0.01 * lambda {
+                    let h = (0.5 * lambda).min(10.0);
+                    *a = antan_core::scan::at_height(a, h);
+                    app.status = tf!("Antenna lifted to {:.2} m above ground (change it under Ground and height)", "Anten zeminden {:.2} m yükseğe kaldırıldı (Zemin ve yükseklik bölümünden değiştirin)", h);
+                }
+            }
         }
+        let g = app.project.model.ground_mut();
         if let Ground::Real { permittivity, conductivity } = g {
             egui::Grid::new("real_ground").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
                 ui.label(tl("Preset", "Hazır"));
@@ -288,8 +330,18 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
             }
             Model::Wires(a) => {
                 let (lo, hi) = a.bounds();
+                ui.add_enabled_ui(grounded, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(tl("Height (lowest point)", "Yükseklik (en alt nokta)"));
+                        let mut h = lo[2];
+                        if ui.add(egui::DragValue::new(&mut h).range(0.0..=1000.0).speed(0.05).max_decimals(2).suffix(" m")).changed() {
+                            *a = antan_core::scan::at_height(a, h);
+                        }
+                        ui.label(RichText::new(format!("{:.2} λ", lo[2] / lambda)).color(theme::TEXT_DIM));
+                    });
+                });
                 ui.horizontal(|ui| {
-                    ui.label(tf!("Height range: {:.0} … {:.0} mm", "Yükseklik aralığı: {:.0} … {:.0} mm", lo[2] * MM, hi[2] * MM));
+                    ui.label(RichText::new(tf!("Height range: {:.0} … {:.0} mm", "Yükseklik aralığı: {:.0} … {:.0} mm", lo[2] * MM, hi[2] * MM)).small().color(theme::TEXT_DIM));
                 });
                 ui.horizontal(|ui| {
                     ui.label(tl("Shift all (z)", "Tümünü kaydır (z)"));
@@ -309,6 +361,14 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                     }
                 });
             }
+        }
+        if ui
+            .add_enabled(grounded, egui::Button::new(tl("📈 Height scan…", "📈 Yükseklik taraması…")))
+            .on_hover_text(tl("Gain, takeoff angle and impedance versus height", "Yüksekliğe göre kazanç, kalkış açısı ve empedans"))
+            .on_disabled_hover_text(tl("Select perfect or real ground first", "Önce kusursuz ya da gerçek zemin seçin"))
+            .clicked()
+        {
+            app.heightscan.open = true;
         }
         if grounded {
             ui.label(
@@ -367,6 +427,27 @@ fn yagi_editor(ui: &mut egui::Ui, d: &mut YagiDesign, selected: usize) {
                 d.sort();
             }
             ui.label(RichText::new(tf!("Boom: {:.0} mm ({:.2} λ)", "Bum: {:.0} mm ({:.2} λ)", d.boom_length() * MM, d.boom_length() / lambda)).color(theme::TEXT_DIM));
+        });
+        ui.separator();
+        // LFA: sürülen eleman eleman düzleminde yatan dikdörtgen halka.
+        ui.horizontal_wrapped(|ui| {
+            let mut lfa = d.loop_width().is_some();
+            if ui
+                .checkbox(&mut lfa, tl("LFA driven loop", "LFA sürülen halka"))
+                .on_hover_text(tl(
+                    "Loop Fed Array (G0KSC style): the driven element is a rectangular loop lying in the element plane, fed at the middle of its rear side. Its length is the long side; the width is measured along the boom.",
+                    "Loop Fed Array (G0KSC tarzı): sürülen eleman, eleman düzleminde yatan dikdörtgen halkadır; arka kenarın ortasından beslenir. Boy uzun kenardır, genişlik bum boyunca ölçülür.",
+                ))
+                .changed()
+            {
+                d.driven_loop = if lfa { Some(0.08 * lambda) } else { None };
+            }
+            if let Some(w) = &mut d.driven_loop {
+                ui.label(tl("loop width", "halka genişliği"));
+                mm_value(ui, w, 0.5, 0.001..=20.0);
+                let len = d.elements.get(d.driven).map(|e| e.length).unwrap_or(0.0);
+                ui.label(RichText::new(tf!("perimeter {:.2} λ", "çevre {:.2} λ", 2.0 * (len + *w) / lambda)).small().color(theme::TEXT_DIM));
+            }
         });
     });
 
@@ -596,7 +677,11 @@ fn loads_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
 fn tune_load(app: &mut AntAnApp, i: usize) {
     use antan_core::loading::{inductance, set_inductance, tune_inductance};
     let result = match &app.project.model {
-        Model::Wires(a) => antan_core::loading::tune_load_inductance(a, i, 0.0),
+        Model::Wires(a) => {
+            // Simetrik eşi varsa (kısaltılmış dipol gibi) ikisi birlikte ayarlanır.
+            let group: Vec<usize> = std::iter::once(i).chain(antan_core::loading::symmetric_partner(a, i)).collect();
+            antan_core::loading::tune_loads_inductance(a, &group, 0.0)
+        }
         Model::Yagi(d) => {
             let f = d.frequency;
             let start = d.loads.get(i).and_then(|l| inductance(&l.kind));
@@ -612,7 +697,12 @@ fn tune_load(app: &mut AntAnApp, i: usize) {
     match result {
         Some((l, z)) => {
             match &mut app.project.model {
-                Model::Wires(a) => set_inductance(&mut a.loads[i].kind, l),
+                Model::Wires(a) => {
+                    if let Some(j) = antan_core::loading::symmetric_partner(a, i) {
+                        set_inductance(&mut a.loads[j].kind, l);
+                    }
+                    set_inductance(&mut a.loads[i].kind, l);
+                }
                 Model::Yagi(d) => set_inductance(&mut d.loads[i].kind, l),
             }
             app.status = tf!("Load {}: L = {:.3} µH, Z = {}", "Yük {}: L = {:.3} µH, Z = {}", i + 1, l * 1e6, crate::viz::fmt_z(z));
@@ -748,6 +838,20 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
         return;
     }
     let sel = selected.min(a.wires.len() - 1);
+    // Serbest uçlar arası boşluklar (ör. Moxon: sürülen ve yansıtıcı kuyrukları arası).
+    let gaps = antan_core::templates::open_end_gaps(a, 0.25 * lambda);
+    if !gaps.is_empty() {
+        section(ui, tl("Gaps between wire ends", "Tel uçları arası boşluklar"), true, |ui| {
+            ui.label(RichText::new(tl("Distance between free (unconnected) wire ends that face each other, e.g. the gap between the driven and reflector tails of a Moxon.", "Birbirine bakan serbest (bağlanmamış) tel uçları arası mesafe; ör. Moxon'da sürülen ve yansıtıcı kuyrukları arasındaki boşluk.")).small().color(theme::TEXT_DIM));
+            egui::Grid::new("gaps").num_columns(2).spacing([10.0, 4.0]).striped(true).show(ui, |ui| {
+                for (i, j, d) in &gaps {
+                    ui.label(format!("{} ↔ {}", a.wires[*i].name, a.wires[*j].name));
+                    ui.label(RichText::new(format!("{:.1} mm  ({:.4} λ)", d * MM, d / lambda)).strong().color(theme::ACCENT));
+                    ui.end_row();
+                }
+            });
+        });
+    }
     section(ui, tl("Selected wire", "Seçili tel"), true, |ui| {
         let w = &mut a.wires[sel];
         egui::Grid::new("wire").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {

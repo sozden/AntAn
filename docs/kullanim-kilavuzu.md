@@ -22,20 +22,37 @@ borularıyla, herhangi bir anteni de teller kümesi olarak. AntAn empedansını,
 9. [Tasarımdan atölyeye: bum düzeltmesi ve kesim listesi](#9-tasarımdan-atölyeye-bum-düzeltmesi-ve-kesim-listesi)
 10. [Tel modelleri: her tür anten](#10-tel-modelleri-her-tür-anten)
 11. [Yükler: bobin, kondansatör ve tuzak](#11-yükler-bobin-kondansatör-ve-tuzak)
-12. [Dosyalar](#12-dosyalar)
-13. [Klavye kısayolları](#13-klavye-kısayolları)
-14. [Sorun giderme](#14-sorun-giderme)
-15. [Doğruluk ve sınırlar](#15-doğruluk-ve-sınırlar)
+12. [Anten önerileri](#12-anten-önerileri)
+13. [LFA Yagi (halka beslemeli)](#13-lfa-yagi-halka-beslemeli)
+14. [Dosyalar](#14-dosyalar)
+15. [Klavye kısayolları](#15-klavye-kısayolları)
+16. [Sorun giderme](#16-sorun-giderme)
+17. [Doğruluk ve sınırlar](#17-doğruluk-ve-sınırlar)
 
 ## 1. Kurulum
 
 **Windows (hazır program)**
 
 1. [Sürümler sayfasını](https://github.com/sozden/AntAn/releases) açın ve
-   `AntAn-<sürüm>-windows-x64.zip` dosyasını indirin.
+   `AntAn-<sürüm>-windows-x64.zip` (64 bit Windows, neredeyse her bilgisayar) ya da
+   `AntAn-<sürüm>-windows-x86.zip` (32 bit Windows) dosyasını indirin.
 2. Zip'i istediğiniz yere (örneğin Masaüstü) açın ve `AntAn.exe`'ye çift tıklayın. Kurulum gerekmez.
 3. Program dijital olarak imzalı olmadığı için Windows SmartScreen ilk açılışta uyarı verebilir:
    **Ek bilgi → Yine de çalıştır**'a tıklayın.
+
+**Linux (hazır program, x86-64)**
+
+1. Sürümler sayfasından `AntAn-<sürüm>-linux-x64.tar.gz` dosyasını indirin.
+2. Açın ve çalıştırın:
+   ```
+   tar xzf AntAn-<sürüm>-linux-x64.tar.gz
+   cd AntAn-<sürüm>-linux-x64
+   ./antan
+   ```
+3. glibc 2.35 ya da daha yenisi (Ubuntu 22.04+, Debian 12+, Fedora 36+, Linux Mint 21+) ve X11 ya
+   da Wayland ile OpenGL destekli bir masaüstü gerekir. Dosya pencereleri masaüstü portalını
+   (`xdg-desktop-portal`) kullanır; normal masaüstlerinde zaten vardır. `install-desktop.sh`, AntAn'ı
+   simgesiyle uygulama menüsüne ekler (isteğe bağlı, yalnız o kullanıcı için).
 
 **Kaynak koddan (Rust kurulu her sistemde)**
 
@@ -58,11 +75,11 @@ yan paneller pencereyle daralır, geniş tablolar yana kaydırılır.
 | No | Bölüm | Ne işe yarar |
 |---|---|---|
 | 1 | Menü çubuğu | Dosya, Düzen, Görünüm, Language / Dil, Yardım |
-| 2 | Araç çubuğu | Yeni, Aç, Kaydet, geri al/yinele, **bant düğmeleri** (10 m … 23 cm) ve **ölçekle** seçeneği |
+| 2 | Araç çubuğu | Yeni, **💡 Öner**, Aç, Kaydet, geri al/yinele, **Bant** menüsü (160 m … 13 cm) ve **ölçekle** seçeneği |
 | 3 | Model listesi | Elemanlar (Yagi) ya da teller (tel modeli). Birine tıklayınca 3B'de turuncu yanar, ayarları sağda açılır |
 | 4 | Sekmeler | 3B diyagram, Kesitler ve akımlar, SWR / Smith, Eşleme, İyileştirme |
 | 5 | Görünüm alanı | Seçili sekmenin içeriği |
-| 6 | Sonuç kartları | Kazanç, ön/arka, besleme empedansı, SWR ve 2:1 bant, huzme genişliği, verim ve boyut |
+| 6 | Sonuç kartları | 3B diyagramın altında yan yana: kazanç, ön/arka, (kalkış açısı), besleme empedansı, SWR ve 2:1 bant, huzme genişliği, verim, boyut |
 | 7 | Özellikler | Antenin bütün ayarları, açılır kapanır bölümler halinde |
 | 8 | Durum çubuğu | Empedans, SWR, kazanç, Ö/A, verim, çözüm süresi; hata mesajları burada çıkar |
 
@@ -89,12 +106,16 @@ Bu bir taslaktır; sonraki adımlarda kendi bandınıza ve borularınıza göre 
 
 Sağ paneldeki **Anten** bölümünde:
 
-- **Frekans:** 144.300 MHz (ya da **2 m** bant düğmesine tıklayın).
+- **Frekans:** 144.300 MHz (ya da **Bant** menüsünden **2 m**). Alan 0.1 … 3000 MHz kabul eder ve
+  frekansın hangi amatör bantta olduğunu yazar.
 - **Hat empedansı Z₀:** kullandığınız koaksiyel, genelde 50 Ω. SWR bu değere göre hesaplanır.
 
-> **İpucu:** bant düğmelerinin yanındaki **ölçekle** kutusu bant düğmesinin ne yapacağını belirler.
+> **İpucu:** Bant menüsünün yanındaki **ölçekle** kutusu bant seçince ne olacağını belirler.
 > İşaretsizse yalnız analiz frekansı değişir. İşaretliyse anten yeni dalga boyuna göre baştan
-> ölçeklenir — 2 m tasarımını 70 cm'ye çevirmek için kullanışlıdır.
+> ölçeklenir — 2 m tasarımını 70 cm'ye çevirmek için kullanışlıdır. Frekans, geometrinin yapıldığı
+> frekanstan çok uzaklaşırsa frekansın altında bir uyarı ve **Anteni bu frekansa ölçekle** düğmesi
+> çıkar. Seçilen frekansta elektriksel olarak çok büyük kalan model çözülmez (çok bellek isterdi);
+> program donmak yerine bunu bildirir.
 
 ### 4.3 Borular
 
@@ -130,7 +151,7 @@ zayıf). Ortada anten, akımlarına göre renkli olarak çizilir; turuncu halka 
 Sürükleyerek döndürün, tekerlekle yakınlaşın, çift tıklayarak sıfırlayın; **Bakış** düğmeleri 3B /
 üst / yan / ön görünümleri verir.
 
-Sağdaki kartlar (2. bölümdeki 6 numara) tasarımı özetler: dBi ve dBd cinsinden kazanç, ön/arka oranı,
+Diyagramın altındaki kartlar (2. bölümdeki 6 numara) tasarımı özetler: dBi ve dBd cinsinden kazanç, ön/arka oranı,
 besleme empedansı, SWR (yeşil iyi, sarı orta, kırmızı kötü) ve 2:1 bant genişliği, huzme genişliği,
 verim ve boyut.
 
@@ -171,6 +192,12 @@ Besleme empedansı Z₀'a eşit değilse **🔌 Eşleme** sekmesi üç çözüm 
 - **Gamma eşleme** — gamma çubuğu boyu, seri kondansatör ve yükseltme oranı (yaklaşık bir model;
   rezonanstaki elemanla en iyi sonuç verir).
 
+Hairpin kartındaki **➕ Bu hairpin'i modele tak**, hesaplanan hairpin'i besleme noktasına paralel
+bağlar. Bundan sonra besleme empedansı, SWR, sonuç kartları ve bütün tarama/Smith abağı hat
+tarafından, hairpin dahil gösterilir (reaktansı frekansla değişir). Takılı değer yeşil şeritte
+değiştirilebilir ya da çıkarılabilir. Aşağıdaki *Hairpin için kapasitif yap* ile birlikte
+kullanınca eşlenmiş son SWR eğrisini görürsünüz.
+
 **Sürülen elemanı otomatik ayarla**, sürülen eleman boyunu gerçek çözücüyle değiştirir:
 *Rezonansa getir* (X = 0, gamma ya da doğrudan besleme için) veya *Hairpin için kapasitif yap*.
 Sonuç tasarıma uygulanır ve geri alınabilir.
@@ -203,8 +230,12 @@ Sonuç tasarıma uygulanır ve geri alınabilir.
 - **Kusursuz zemin** — ideal iletken zemin.
 - **Gerçek zemin** — **Hazır** listesinden toprak türünü seçin (deniz suyu, ortalama toprak, kayalık
   toprak …) ya da dielektrik sabiti εr ve iletkenlik σ değerlerini girin.
-- Yagi'de **Bum yüksekliği**'ni girin. Tel modellerinde koordinatlar mutlak yüksekliktir;
-  **Tümünü kaydır (z)** ya da **zemine otur** düğmelerini kullanın.
+- Yagi'de **Bum yüksekliği**'ni, tel modelinde **Yükseklik (en alt nokta)**'yı girin ya da
+  **Tümünü kaydır (z)** / **zemine otur** düğmelerini kullanın. Tel modeli serbest uzaydan zemine
+  alınınca otomatik olarak λ/2 (en çok 10 m) yükseğe kaldırılır.
+- **📈 Yükseklik taraması…** anteni birçok yükseklikte (ör. 0.1 … 2 λ) çözer; kazancı ve kalkış
+  açısını yüksekliğe göre çizer, Ö/A, empedans ve SWR'yi tabloda verir. Fareyle grafikte değer
+  okunur; grafiğe tıklayınca (ya da tablodaki *uygula*) o yükseklik modele uygulanır.
 
 Zemin varken **Kalkış açısı** kartı çıkar: en güçlü ışımanın yükseliş açısı. Anten yükseldikçe açı
 düşer (DX için daha iyi). Yatay kesit de bu durumda kalkış açısında alınır.
@@ -249,8 +280,9 @@ uç sarkmasını ve girdiğiniz hızdaki rüzgâr yükünü gösterir.
 
 Eleman bazlı Yagi olmayan her şey bir **tel modelidir**.
 
-1. **➕ Yeni → Tel modelleri** hazır antenler sunar: dipol, ters V, katlanmış dipol, 2 elemanlı quad,
-   delta loop, ground plane, Moxon, zemine bağlı dikey, tuzaklı dipol, bobin yüklü dikey.
+1. **➕ Yeni → Tel modelleri** hazır antenler sunar: dipol, ters V, katlanmış dipol, bobinle
+   kısaltılmış dipol (yarı boy), 2 elemanlı quad, delta loop, ground plane, Moxon, zemine bağlı dikey,
+   tuzaklı dipol, bobin yüklü dikey.
    **Düzen → Tel modeline dönüştür** bir Yagi'yi de tellere çevirir.
 2. Model listesinden bir tel seçin. **Seçili tel** bölümünde başlangıç ve bitiş koordinatlarını (mm),
    dış çapı, boru/dolu seçimini, malzemeyi ve parça sayısını girin (*otomatik* neredeyse her zaman
@@ -261,6 +293,10 @@ Eleman bazlı Yagi olmayan her şey bir **tel modelidir**.
 5. **Besleme:** teli ve tel üzerindeki konumu seçin (0 baş, 0.5 orta, 1 son). Uçtan besleme yalnızca
    o uç başka bir telle ya da zeminle birleşiyorsa çalışır — örneğin ters V'nin tepesi ya da dikeyin
    tabanı.
+
+**Tel uçları arası boşluklar.** İki serbest tel ucu birbirine bakıyorsa — ör. Moxon'da sürülen ve
+yansıtıcı kuyrukları arası — mesafe **Tel uçları arası boşluklar** bölümünde listelenir ve 3B
+görünümde turuncu kesikli ölçü çizgisiyle gösterilir.
 
 ## 11. Yükler: bobin, kondansatör ve tuzak
 
@@ -275,13 +311,32 @@ ve türü seçin:
 - **Sabit R + jX** — frekanstan bağımsız empedans.
 
 Yükün o anki frekanstaki empedansı altında yazar. **L'yi rezonansa ayarla** besleme reaktansını sıfır
-yapan bobin değerini bulur — örneğin kısa bir dikeyin yükleme bobini. Direnç (ya da tuzağın Q'su)
+yapan bobin değerini bulur — örneğin kısa bir dikeyin yükleme bobini. Yükün aynı telde simetrik bir eşi
+varsa (bobinle kısaltılmış dipoldeki gibi) iki bobin birlikte ayarlanır. Direnç (ya da tuzağın Q'su)
 bobin kaybıdır ve verimi düşürür.
 
 Yagi'de bölümün adı **Eleman yüklemeleri**'dir: 0 konumundaki yük elemanın ortasına, diğer konumlar
 her kola simetrik birer yük olarak yerleşir — kısaltılmış HF Yagi'ler için kullanışlıdır.
 
-## 12. Dosyalar
+## 12. Anten önerileri
+
+**💡 Öner** (araç çubuğu ya da **➕ Yeni → Bir frekans için öneriler…**) bir frekans ya da bant
+ister; o frekansa uygun bütün anten türlerini — Yagi'ler, LFA, Moxon, quad, dipoller, halkalar,
+dikeyler — kurar, çözer ve kazanç, ön/arka, besleme empedansı, SWR ve en büyük boyutu yan yana
+listeler (12 m üstü turuncu, 25 m üstü kırmızı). **Aç** birini yeni tasarım olarak yükler. Beam ve
+tel antenler serbest uzayda, dikeyler zeminleriyle karşılaştırılır.
+
+## 13. LFA Yagi (halka beslemeli)
+
+LFA'da (G0KSC tarzı) sürülen eleman, **eleman düzleminde yatan dikdörtgen bir halkadır**; çevresi
+yaklaşık bir dalga boyudur ve arka kenarının ortasından beslenir. Eşleme düzeneği olmadan doğrudan
+~50 Ω verir. **➕ Yeni → LFA Yagi** halka boyutu bu çözücüyle ayarlanmış 3 … 11 elemanlı tasarımlar
+oluşturur. Her Yagi, eleman tablosunun altındaki **LFA sürülen halka** kutusuyla halkaya
+çevrilebilir: sürülen elemanın boyu halkanın uzun kenarı olur, **halka genişliği** bum boyunca
+ölçülür. Kesim listesi halka kenarlarını verir; halkaya bum düzeltmesi uygulanmaz. Başlangıçtaki
+yönlendiriciler standart olanlardır — en iyi ön/arka için İyileştirme sekmesini çalıştırın.
+
+## 14. Dosyalar
 
 - **Dosya → Kaydet / Farklı kaydet** projeyi `.antan` dosyası (okunabilir JSON) olarak saklar.
   **Aç** onu yükler.
@@ -289,7 +344,7 @@ her kola simetrik birer yük olarak yerleşir — kısaltılmış HF Yagi'ler i�
   kart dosyası yazar.
 - **Dosya → Pencereyi PNG olarak kaydet** program penceresinin resmini kaydeder.
 
-## 13. Klavye kısayolları
+## 15. Klavye kısayolları
 
 | Tuşlar | İşlem |
 |---|---|
@@ -301,7 +356,7 @@ her kola simetrik birer yük olarak yerleşir — kısaltılmış HF Yagi'ler i�
 | Fare tekerleği (3B) | Yakınlaştır |
 | Çift tık (3B) | Görünümü sıfırla |
 
-## 14. Sorun giderme
+## 16. Sorun giderme
 
 | Mesaj ya da belirti | Nedeni ve çözümü |
 |---|---|
@@ -309,11 +364,12 @@ her kola simetrik birer yük olarak yerleşir — kısaltılmış HF Yagi'ler i�
 | *… kaynak geçerli bir noktada değil* | Besleme serbest bir tel ucunda. Ortaya (0.5) ya da başka bir telle veya zeminle birleşen bir uca taşıyın. |
 | *… tel zeminin (z = 0) altına iniyor* | Zemin açıkken bütün teller z ≥ 0'da olmalıdır. Anteni yükseltin (Tümünü kaydır / Bum yüksekliği). |
 | *… yük geçerli bir noktada değil* | Yük bir telin içinde ya da tam iki telin birleştiği noktada olmalıdır. |
+| *Model bu frekansta elektriksel olarak çok büyük* | Frekans, geometrinin yapıldığı frekansın çok üstünde. Düşürün ya da frekans alanının altındaki **Anteni bu frekansa ölçekle** düğmesini kullanın. |
 | SWR yüksek | Eşleme sekmesini kullanın ya da iyileştiricide SWR'yi hedeflere katın. |
 | "L'yi rezonansa ayarla" sonuç vermiyor | Daha küçük bir endüktanstan başlayın; çok büyük bobinler ötesindeki tel parçasıyla rezonansa girebilir. |
 | Sonuçlar NEC'ten biraz farklı | Normaldir; programlar arasında birkaç yüzdelik fark beklenir. |
 
-## 15. Doğruluk ve sınırlar
+## 17. Doğruluk ve sınırlar
 
 AntAn, bilinen sonuçlarla sınanmış bir ince tel moment yöntemi çözücüsü kullanır: yarım dalga dipol
 (≈ 73 + j42 Ω, 2.15 dBi), enerji korunumu, zemin üzerinde görüntü teorisi ve daha fazlası. Tam liste

@@ -4,7 +4,7 @@
 
 **English** · [Türkçe](README.tr.md)
 
-**[User guide](docs/user-guide.md)** · [Kullanma kılavuzu (Türkçe)](docs/kullanim-kilavuzu.md) · [Download for Windows](https://github.com/sozden/AntAn/releases/latest)
+**[User guide](docs/user-guide.md)** · [Kullanma kılavuzu (Türkçe)](docs/kullanim-kilavuzu.md) · [Download (Windows 64/32-bit, Linux)](https://github.com/sozden/AntAn/releases/latest)
 
 An **antenna analysis and design program** in the spirit of EZNEC/MMANA, written from scratch in
 Rust. It has its own method-of-moments (MoM) solver, element-based Yagi design (including tapered /
@@ -29,9 +29,15 @@ available in **English and Turkish** (Language / Dil menu), with an adjustable t
   with outer diameter, solid rod or tube with wall thickness, and material.
 - **Wire model:** each wire has start/end coordinates (mm), diameter, wall thickness, material and
   segment count. Wires whose ends touch are **joined automatically** (corners, T-junctions, radials).
-- Templates: 2–11 element Yagi, tapered Yagi example, half-wave dipole, inverted V, folded dipole,
-  2-element quad, delta loop, ground plane (drooping radials), Moxon rectangle, ground-mounted
-  quarter-wave vertical, trap dipole 40/80 m, coil-loaded short vertical.
+- Templates: 2–11 element Yagi, tapered Yagi example, **LFA Yagi** (loop fed array, 3–11 elements),
+  half-wave dipole, inverted V, folded dipole, **coil-loaded short dipole**, 2-element quad, delta loop,
+  ground plane (drooping radials), Moxon rectangle, ground-mounted quarter-wave vertical, trap dipole
+  40/80 m, coil-loaded short vertical.
+- **LFA driven loop:** any Yagi's driven element can be a rectangular loop in the element plane
+  (G0KSC style), fed at the middle of its rear side; loop width is editable.
+- **Antenna suggestions:** enter a frequency and AntAn builds and solves every suitable antenna type,
+  listing gain, F/B, impedance, SWR and size side by side; open any of them with one click.
+- **Gaps between wire ends** (e.g. the Moxon driven–reflector gap) are listed and dimensioned in 3D.
 - Materials: Al 6063-T6, Al 6061-T6, copper, brass, stainless 304, perfect conductor.
 
 **Analysis**
@@ -51,7 +57,10 @@ available in **English and Turkish** (Language / Dil menu), with an adjustable t
 - Real ground: currents are solved over perfect ground and the far field uses Fresnel reflection
   coefficients (the MININEC/MMANA approach), giving realistic low-angle gain and **takeoff angle**.
   Soil loss does not enter the feed impedance.
-- Boom height for Yagis (m / λ); shift the whole geometry or "sit on ground" for wire models.
+- Boom height for Yagis, lowest-point height for wire models (m / λ); wire models are lifted
+  automatically when ground is switched on.
+- **Height scan:** gain and takeoff angle versus height (plus F/B, impedance, SWR table); click the
+  chart to apply a height.
 - Over ground the azimuth cut is taken at the takeoff angle, F/B is measured at the same elevation,
   and the optimizer scores gain at the takeoff angle.
 
@@ -87,6 +96,8 @@ available in **English and Turkish** (Language / Dil menu), with an adjustable t
 **Matching**
 - L network (all solutions, with a check impedance), hairpin (beta) length and inductance, gamma rod
   length and series capacitor.
+- **Install the hairpin on the model:** SWR, impedance, sweep and Smith chart are then shown on the
+  line side with the hairpin included (frequency-dependent reactance).
 - **Auto-tune the driven element:** to resonance (X = 0) or to the capacitive reactance a hairpin
   needs, iterated with the full solver.
 
@@ -102,7 +113,9 @@ available in **English and Turkish** (Language / Dil menu), with an adjustable t
 **Files**
 - Project: `.antan` (readable JSON). NEC-2 card export (GW, GE/GN, LD, EX, FR, RP) for comparison
   with 4nec2/xnec2c/EZNEC. Save the window as PNG. Undo/redo (Ctrl+Z / Ctrl+Y), Ctrl+O / Ctrl+S.
-- Band buttons (10 m … 23 cm), optionally scaling the geometry to the new frequency.
+- Band menu with all amateur bands from 160 m to 13 cm, optionally scaling the geometry to the new
+  frequency. Frequency range 0.1–3000 MHz; an electrically too large model is refused with a
+  message (instead of exhausting memory), and a one-click "scale the antenna to this frequency" is offered.
 
 ## Building and running
 
@@ -172,11 +185,13 @@ differences of a few percent from NEC are normal.
 
 Non-interactive UI check: started with `ANTAN_AUTOSHOT=<png path>`, the program saves a screenshot of
 the window when the sweep is finished and exits. Further options: `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
-`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded`, `ANTAN_AUTOSHOT_OPTIM=<iterations>`,
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded|lfa|loaded_dipole|dipole_ground`,
+`ANTAN_AUTOSHOT_WINDOW=suggest|height`, `ANTAN_AUTOSHOT_FREQ=<MHz>`, `ANTAN_AUTOSHOT_HAIRPIN=1`, `ANTAN_AUTOSHOT_OPTIM=<iterations>`,
 `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3`.
 
 ## Roadmap
 
+- Optimizer for wire models (and for the LFA loop width)
 - Effect of real ground on the currents (Sommerfeld/Norton) and soil loss in the feed impedance
 - Loss estimate for buried radial systems
 - Multiple sources and phased feeding, stacking
@@ -198,6 +213,19 @@ The methods and formulas come from published literature; the code was written fr
 - [SM5BSZ — Boom corrections from various sources](https://sm5bsz.com/antennas/sa/others.htm)
 - [YU1AW — Yagi boom correction](https://www.qsl.net/yu1aw/Misc/yagi_boom_correction.pdf)
 - [DK7ZB — Yagi details](https://www.qsl.net/d/dk7zb/2m-short/detail.htm)
+
+## Thanks
+
+Many thanks to the radio amateurs who tested AntAn and helped improve it with their feedback:
+
+| Call sign | Name | Contribution |
+|---|---|---|
+| TA7MVL | Mevlüt | Testing and feedback (v0.2.0) |
+| TA6TTT | Asım | Testing and feedback (v0.2.0) |
+| TA1OZV | Tayfun | Testing and feedback (v0.2.0) |
+
+Contributions of any kind — testing, bug reports, ideas, code — are welcome and will be credited
+here with call sign and name.
 
 ## License
 

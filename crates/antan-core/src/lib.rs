@@ -5,6 +5,7 @@
 //!
 //! Akış: [`Antenna`] → [`solver::solve`] → [`Solution`] → [`farfield`] / [`matching`].
 
+pub mod bands;
 pub mod farfield;
 pub mod geometry;
 pub mod i18n;
@@ -15,6 +16,7 @@ pub mod material;
 pub mod mechanics;
 pub mod nec;
 pub mod optimize;
+pub mod scan;
 pub mod solver;
 pub mod templates;
 pub mod yagi;

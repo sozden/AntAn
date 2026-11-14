@@ -22,20 +22,37 @@ with a worked example and then covers each feature.
 9. [From design to workshop: boom correction and cut list](#9-from-design-to-workshop-boom-correction-and-cut-list)
 10. [Wire models: any antenna](#10-wire-models-any-antenna)
 11. [Loads: coils, capacitors and traps](#11-loads-coils-capacitors-and-traps)
-12. [Files](#12-files)
-13. [Keyboard shortcuts](#13-keyboard-shortcuts)
-14. [Troubleshooting](#14-troubleshooting)
-15. [Accuracy and limitations](#15-accuracy-and-limitations)
+12. [Antenna suggestions](#12-antenna-suggestions)
+13. [LFA Yagi (loop fed array)](#13-lfa-yagi-loop-fed-array)
+14. [Files](#14-files)
+15. [Keyboard shortcuts](#15-keyboard-shortcuts)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Accuracy and limitations](#17-accuracy-and-limitations)
 
 ## 1. Installation
 
 **Windows (ready-made program)**
 
 1. Open the [Releases page](https://github.com/sozden/AntAn/releases) and download
-   `AntAn-<version>-windows-x64.zip`.
+   `AntAn-<version>-windows-x64.zip` (64-bit Windows, almost every PC) or
+   `AntAn-<version>-windows-x86.zip` (32-bit Windows).
 2. Extract the zip anywhere (e.g. your Desktop) and double-click `AntAn.exe`. No installation is needed.
 3. The program is not code-signed, so Windows SmartScreen may show a warning the first time:
    click **More info → Run anyway**.
+
+**Linux (ready-made program, x86-64)**
+
+1. Download `AntAn-<version>-linux-x64.tar.gz` from the Releases page.
+2. Extract and run:
+   ```
+   tar xzf AntAn-<version>-linux-x64.tar.gz
+   cd AntAn-<version>-linux-x64
+   ./antan
+   ```
+3. Requires glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+, Linux Mint 21+) and a
+   desktop with X11 or Wayland and OpenGL. File dialogs use the desktop portal
+   (`xdg-desktop-portal`), which normal desktops already have. `install-desktop.sh` adds AntAn to
+   the application menu with its icon (optional, for the current user only).
 
 **From source (any platform with Rust)**
 
@@ -59,11 +76,11 @@ side panels shrink with the window and wide tables scroll sideways.
 | # | Area | What it does |
 |---|---|---|
 | 1 | Menu bar | File, Edit, View, Language / Dil, Help |
-| 2 | Toolbar | New, Open, Save, undo/redo, **band buttons** (10 m … 23 cm) and the **scale** option |
+| 2 | Toolbar | New, **💡 Suggest**, Open, Save, undo/redo, the **Band** menu (160 m … 13 cm) and the **scale** option |
 | 3 | Model tree | The elements (Yagi) or wires (wire model). Click one to select it — it turns orange in 3D and its settings open on the right |
 | 4 | Tabs | 3D pattern, Cuts and currents, SWR / Smith, Matching, Optimization |
 | 5 | View area | The content of the selected tab |
-| 6 | Result cards | Gain, front/back, feed impedance, SWR and 2:1 bandwidth, beamwidth, efficiency and size |
+| 6 | Result cards | Under the 3D pattern, side by side: gain, front/back, (takeoff angle), feed impedance, SWR and 2:1 bandwidth, beamwidth, efficiency, size |
 | 7 | Properties | All settings of the antenna, in collapsible sections |
 | 8 | Status bar | Impedance, SWR, gain, F/B, efficiency, solver time; error messages appear here |
 
@@ -90,12 +107,16 @@ draft — the next steps adapt it to your band and your tubes.
 
 In **Antenna** (right panel) set:
 
-- **Frequency:** 144.300 MHz (or click the **2 m** band button).
+- **Frequency:** 144.300 MHz (or pick **2 m** from the **Band** menu). The field accepts 0.1 … 3000 MHz
+  and shows which amateur band the frequency is in.
 - **Line impedance Z₀:** your coax, usually 50 Ω. SWR is calculated against this value.
 
-> **Tip:** the **scale** checkbox next to the band buttons decides what a band button does. Unchecked:
+> **Tip:** the **scale** checkbox next to the Band menu decides what choosing a band does. Unchecked:
 > only the analysis frequency changes. Checked: the whole antenna is rescaled to the new wavelength —
-> handy for turning a 2 m design into a 70 cm one.
+> handy for turning a 2 m design into a 70 cm one. If the frequency ends up far from the one the
+> geometry was made for, a warning appears under the frequency with a **Scale the antenna to this
+> frequency** button. An antenna that is electrically huge at the chosen frequency is not solved (it
+> would need too much memory); the program says so instead of freezing.
 
 ### 4.3 Tubes
 
@@ -131,7 +152,7 @@ direction, blue = weak). The antenna is drawn in the middle with its currents in
 ring is the feed point. Drag to rotate, use the wheel to zoom, double-click to reset; the **View**
 buttons give 3D / top / side / front views.
 
-The cards on the right (area 6 in section 2) summarize the design: gain in dBi and dBd, front-to-back
+The cards under the pattern (area 6 in section 2) summarize the design: gain in dBi and dBd, front-to-back
 ratio, feed impedance, SWR (green good, amber fair, red poor) with the 2:1 bandwidth, beamwidth,
 efficiency and size.
 
@@ -173,6 +194,12 @@ When the feed impedance is not equal to Z₀, the **🔌 Matching** tab offers t
 - **Gamma match** — gamma rod length, series capacitor and step-up ratio (an approximate model;
   best with a resonant element).
 
+**➕ Install this hairpin on the model** (in the hairpin card) puts the calculated hairpin across the
+feed point. From then on the feed impedance, SWR, the result cards and the whole sweep/Smith chart
+are shown on the line side, with the hairpin included (its reactance changes with frequency). The
+installed value can be edited or removed in the green bar. Combine it with *Make capacitive for
+hairpin* below to see the final matched SWR curve.
+
 **Auto-tune the driven element** changes the driven element length with the full solver:
 *Make resonant* (X = 0, for gamma or direct feed) or *Make capacitive for hairpin*. The result is
 applied to the design and can be undone.
@@ -206,8 +233,12 @@ In **Ground and height**:
 - **Perfect ground** — an ideal conducting ground.
 - **Real ground** — pick a soil from **Preset** (sea water, average soil, rocky soil …) or enter the
   dielectric constant εr and conductivity σ.
-- For a Yagi set the **Boom height**. For wire models the coordinates are absolute; use
-  **Shift all (z)** or **sit on ground**.
+- For a Yagi set the **Boom height**. For a wire model set **Height (lowest point)**, or use
+  **Shift all (z)** / **sit on ground**. When you switch a wire model from free space to ground, it is
+  lifted to λ/2 (at most 10 m) automatically.
+- **📈 Height scan…** solves the antenna at many heights (e.g. 0.1 … 2 λ) and plots gain and
+  takeoff angle against height, with a table of F/B, impedance and SWR. Hover the chart to read
+  values; click it (or *apply* in the table) to set that height on the model.
 
 With ground, a **Takeoff angle** card appears — the elevation of maximum radiation. Higher antennas
 give lower angles (better for DX). The horizontal cut is then taken at the takeoff angle.
@@ -252,8 +283,8 @@ element under its own weight, and the wind load at the speed you enter.
 Anything that is not an element-based Yagi is a **wire model**.
 
 1. **➕ New → Wire models** offers ready-made antennas: dipole, inverted V, folded dipole,
-   2-element quad, delta loop, ground plane, Moxon, ground-mounted vertical, trap dipole,
-   coil-loaded vertical. **Edit → Convert to wire model** turns a Yagi into wires as well.
+   coil-loaded short dipole (half size), 2-element quad, delta loop, ground plane, Moxon,
+   ground-mounted vertical, trap dipole, coil-loaded vertical. **Edit → Convert to wire model** turns a Yagi into wires as well.
 2. Select a wire in the model tree. In **Selected wire** set the start and end coordinates (mm),
    outer diameter, tube/solid, material and segment count (*auto* is fine almost always).
 3. **Joining wires:** give two wire ends exactly the same coordinates — AntAn connects them
@@ -262,6 +293,10 @@ Anything that is not an element-based Yagi is a **wire model**.
 5. **Feed:** choose the wire and the position along it (0 start, 0.5 center, 1 end). Feeding at an end
    works only where that end joins another wire or the ground — e.g. the apex of an inverted V or the
    base of a vertical.
+
+**Gaps between wire ends.** Where two free wire ends face each other — e.g. the gap between the
+driven and reflector tails of a Moxon — the distance is listed in **Gaps between wire ends** and
+drawn as an amber dashed dimension in the 3D view.
 
 ## 11. Loads: coils, capacitors and traps
 
@@ -276,19 +311,39 @@ type:
 - **Fixed R + jX** — a frequency-independent impedance.
 
 The impedance of the load at the current frequency is shown under it. **Tune L to resonance** finds
-the coil value that makes the feed reactance zero — e.g. the loading coil of a short vertical.
+the coil value that makes the feed reactance zero — e.g. the loading coil of a short vertical. When
+the load has a symmetric twin on the same wire (as in the coil-loaded dipole) both coils are tuned
+together.
 Resistance (or the trap's Q) is coil loss and lowers the efficiency.
 
 For a Yagi the section is called **Element loads**: a load at position 0 sits at the element center;
 any other position puts one load on each arm, symmetrically — useful for shortened HF Yagis.
 
-## 12. Files
+## 12. Antenna suggestions
+
+**💡 Suggest** (toolbar, or **➕ New → Suggestions for a frequency…**) asks for a frequency or band
+and builds every suitable antenna type for it — Yagis, LFA, Moxon, quad, dipoles, loops, verticals —
+solves them and lists gain, front/back, feed impedance, SWR and the largest dimension side by side
+(amber above 12 m, red above 25 m). **Open** loads one as a new design. Beams and wire antennas are
+compared in free space; verticals with their ground.
+
+## 13. LFA Yagi (loop fed array)
+
+In an LFA (G0KSC style) the driven element is a rectangular **loop lying in the element plane**,
+about one wavelength around, fed at the middle of its rear side. It gives a direct ~50 Ω feed without
+a matching device. **➕ New → LFA Yagi** creates 3 … 11 element designs whose loop size was tuned with
+this solver. Any Yagi can be switched with the **LFA driven loop** checkbox under the element table:
+the driven element's length is then the loop's long side and **loop width** is measured along the
+boom. The cut list shows the loop sides; no boom correction is applied to the loop. The starting
+directors are the standard ones — run the Optimization tab for the best front/back.
+
+## 14. Files
 
 - **File → Save / Save as** stores the project as a `.antan` file (readable JSON). **Open** loads it.
 - **File → Export as NEC-2 file** writes a NEC card deck for comparing with 4nec2, xnec2c or EZNEC.
 - **File → Save window as PNG** saves a picture of the program window.
 
-## 13. Keyboard shortcuts
+## 15. Keyboard shortcuts
 
 | Keys | Action |
 |---|---|
@@ -300,7 +355,7 @@ any other position puts one load on each arm, symmetrically — useful for short
 | Mouse wheel (3D) | Zoom |
 | Double-click (3D) | Reset view |
 
-## 14. Troubleshooting
+## 16. Troubleshooting
 
 | Message or symptom | Cause and fix |
 |---|---|
@@ -310,9 +365,10 @@ any other position puts one load on each arm, symmetrically — useful for short
 | *Load … is not at a valid point* | Loads must be inside a wire or where exactly two wires meet. |
 | SWR is high | Use the Matching tab, or let the optimizer include SWR. |
 | "Tune L to resonance" fails | Start from a smaller inductance; very large coils can resonate with the wire beyond them. |
+| *The model is electrically too large at this frequency* | The frequency is far above what the geometry was made for. Lower it, or use **Scale the antenna to this frequency** under the frequency field. |
 | Results differ slightly from NEC | Normal — a few percent is expected between programs. |
 
-## 15. Accuracy and limitations
+## 17. Accuracy and limitations
 
 AntAn uses a thin-wire method-of-moments solver that was checked against known results: the
 half-wave dipole (≈ 73 + j42 Ω, 2.15 dBi), energy conservation, image theory over ground and more —

@@ -4,7 +4,7 @@
 
 [English](README.md) · **Türkçe**
 
-**[Kullanma kılavuzu](docs/kullanim-kilavuzu.md)** · [User guide (English)](docs/user-guide.md) · [Windows için indir](https://github.com/sozden/AntAn/releases/latest)
+**[Kullanma kılavuzu](docs/kullanim-kilavuzu.md)** · [User guide (English)](docs/user-guide.md) · [İndir (Windows 64/32 bit, Linux)](https://github.com/sozden/AntAn/releases/latest)
 
 EZNEC/MMANA tarzı, sıfırdan Rust ile yazılmış bir **anten analiz ve hesaplama programı**.
 Kendi moment yöntemi (MoM) çözücüsü, eleman bazlı Yagi tasarımı (kademeli/teleskopik borular
@@ -29,9 +29,15 @@ ayarlanabilir (Görünüm → Yazı boyutu, Ctrl +/−).
   her bölüm için dış çap, içi dolu / boru ve et kalınlığı, malzeme seçimi.
 - **Tel modeli:** her tel başlangıç/bitiş koordinatı (mm), çap, et kalınlığı, malzeme, parça sayısı.
   Teller uç uca değdiğinde otomatik **birleşim** oluşur (köşe, T, radyal yıldız).
-- Şablonlar: 2–11 elemanlı Yagi, kademeli Yagi örneği, yarım dalga dipol, ters V, katlanmış dipol,
-  2 elemanlı quad, delta loop, ground plane (eğik radyalli), Moxon dikdörtgeni, zemine bağlı
-  çeyrek dalga dikey, tuzaklı 40/80 m dipol, bobin yüklü kısa dikey.
+- Şablonlar: 2–11 elemanlı Yagi, kademeli Yagi örneği, **LFA Yagi** (halka beslemeli, 3–11 eleman),
+  yarım dalga dipol, ters V, katlanmış dipol, **bobinle kısaltılmış dipol**, 2 elemanlı quad, delta
+  loop, ground plane (eğik radyalli), Moxon dikdörtgeni, zemine bağlı çeyrek dalga dikey, tuzaklı
+  40/80 m dipol, bobin yüklü kısa dikey.
+- **LFA sürülen halka:** her Yagi'nin sürülen elemanı, eleman düzleminde yatan dikdörtgen halka
+  (G0KSC tarzı) yapılabilir; arka kenarın ortasından beslenir, halka genişliği ayarlanır.
+- **Anten önerileri:** bir frekans girin; AntAn uygun bütün anten türlerini kurup çözer, kazanç,
+  Ö/A, empedans, SWR ve boyutu yan yana listeler; istenen tek tıkla açılır.
+- **Tel uçları arası boşluklar** (ör. Moxon'da sürülen–yansıtıcı boşluğu) listelenir ve 3B'de ölçülendirilir.
 - Malzemeler: Al 6063-T6, Al 6061-T6, bakır, pirinç, paslanmaz 304, kayıpsız.
 
 **Analiz**
@@ -50,7 +56,10 @@ ayarlanabilir (Görünüm → Yazı boyutu, Ctrl +/−).
 - Gerçek zemin: akımlar kusursuz zeminle, uzak alan Fresnel yansıma katsayılarıyla hesaplanır
   (MININEC/MMANA yaklaşımı) → gerçekçi düşük açı kazancı ve **kalkış açısı**. Toprak kaybı
   besleme empedansına girmez.
-- Yagi için bum yüksekliği (m / λ); tel modelinde tüm geometriyi kaydırma, "zemine otur".
+- Yagi için bum yüksekliği, tel modeli için en alt nokta yüksekliği (m / λ); zemin açılınca tel
+  modeli otomatik yükseltilir.
+- **Yükseklik taraması:** yüksekliğe göre kazanç ve kalkış açısı (Ö/A, empedans, SWR tablosuyla);
+  grafiğe tıklayınca o yükseklik uygulanır.
 - Zemin üzerinde azimut kesiti kalkış açısında alınır; ön/arka aynı yükseliş açısında ölçülür;
   iyileştirici kazancı kalkış açısında değerlendirir.
 
@@ -83,6 +92,8 @@ ayarlanabilir (Görünüm → Yazı boyutu, Ctrl +/−).
 **Eşleme**
 - L devresi (tüm çözümler, kontrol empedansıyla), hairpin (beta) boyu ve endüktansı,
   gamma çubuğu boyu ve seri kondansatörü.
+- **Hairpin'i modele takma:** SWR, empedans, tarama ve Smith abağı hat tarafından, hairpin dahil
+  gösterilir (frekansa bağlı reaktans).
 - **Sürülen elemanı otomatik ayarla:** rezonansa (X = 0) veya hairpin için gereken kapasitif
   reaktansa, gerçek çözücüyle yinelenerek.
 
@@ -98,7 +109,9 @@ ayarlanabilir (Görünüm → Yazı boyutu, Ctrl +/−).
 **Dosya**
 - Proje: `.antan` (JSON, okunabilir). NEC-2 kart dosyası dışa aktarımı (GW, GE/GN, LD, EX, FR, RP) (4nec2/xnec2c/EZNEC ile
   karşılaştırma için). Pencereyi PNG kaydetme. Geri al/yinele (Ctrl+Z / Ctrl+Y), Ctrl+O / Ctrl+S.
-- Bant düğmeleri (10 m … 23 cm), isteğe bağlı olarak geometriyi yeni frekansa ölçekler.
+- 160 m'den 13 cm'ye bütün amatör bantları içeren Bant menüsü; isteğe bağlı olarak geometriyi yeni
+  frekansa ölçekler. Frekans aralığı 0.1–3000 MHz; elektriksel olarak çok büyük model bellek
+  tüketmek yerine mesajla reddedilir ve tek tıkla "anteni bu frekansa ölçekle" önerilir.
 
 ## Derleme ve çalıştırma
 
@@ -166,10 +179,12 @@ ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
 
 Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
 bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
-`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3` ek seçeneklerdir.
+`ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded|lfa|loaded_dipole|dipole_ground`,
+`ANTAN_AUTOSHOT_WINDOW=suggest|height`, `ANTAN_AUTOSHOT_FREQ=<MHz>`, `ANTAN_AUTOSHOT_HAIRPIN=1`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3` ek seçeneklerdir.
 
 ## Yol haritası
 
+- Tel modelleri için iyileştirici (ve LFA halka genişliği)
 - Gerçek zeminin akımlara etkisi (Sommerfeld/Norton) ve toprak kaybının empedansa yansıması
 - Gömülü radyal sistemi kaybı tahmini
 - Çoklu kaynak ve faz besleme, yığınlama (stacking)
@@ -191,6 +206,19 @@ Yöntemler ve formüller yayımlanmış literatürden alınmış, kod sıfırdan
 - [SM5BSZ — Boom corrections from various sources](https://sm5bsz.com/antennas/sa/others.htm)
 - [YU1AW — Yagi boom correction](https://www.qsl.net/yu1aw/Misc/yagi_boom_correction.pdf)
 - [DK7ZB — Yagi details](https://www.qsl.net/d/dk7zb/2m-short/detail.htm)
+
+## Teşekkürler
+
+AntAn'ı test edip geri bildirimleriyle gelişmesine katkıda bulunan radyo amatörlerine çok teşekkürler:
+
+| Çağrı işareti | Ad | Katkı |
+|---|---|---|
+| TA7MVL | Mevlüt | Test ve geri bildirim (v0.2.0) |
+| TA6TTT | Asım | Test ve geri bildirim (v0.2.0) |
+| TA1OZV | Tayfun | Test ve geri bildirim (v0.2.0) |
+
+Her türlü katkı — test, hata bildirimi, öneri, kod — memnuniyetle karşılanır ve burada çağrı işareti
+ve adıyla anılır.
 
 ## Lisans
 

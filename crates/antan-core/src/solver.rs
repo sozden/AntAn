@@ -45,7 +45,13 @@ pub enum SolveError {
     BelowGround(usize),
     BadLoad(usize),
     Singular,
+    /// Model elektriksel olarak çok büyük (bilinmeyen sayısı sınırı aşıyor).
+    TooLarge(usize),
 }
+
+/// Bilinmeyen sayısı üst sınırı. Bellek (n² karmaşık sayı) ve süre (n³) bunun
+/// üstünde masaüstünde makul olmaktan çıkar; tarama da bunu paralel çalıştırır.
+pub const MAX_UNKNOWNS: usize = 1500;
 
 impl std::fmt::Display for SolveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -57,6 +63,12 @@ impl std::fmt::Display for SolveError {
             Self::BelowGround(i) => f.write_str(&crate::tf!("Wire {} goes below ground (z = 0); increase the height", "{}. tel zeminin (z = 0) altına iniyor; yüksekliği artırın", i + 1)),
             Self::BadLoad(i) => f.write_str(&crate::tf!("Load {} is not at a valid point (free end, multi-wire junction or nonexistent wire)", "{}. yük geçerli bir noktada değil (serbest uç, çoklu birleşim ya da olmayan tel)", i + 1)),
             Self::Singular => f.write_str(crate::i18n::t("Impedance matrix is singular; the geometry could not be solved", "Empedans matrisi tekil; geometri çözülemedi")),
+            Self::TooLarge(n) => f.write_str(&crate::tf!(
+                "The model is electrically too large at this frequency (~{} segments, limit {}). Lower the frequency or scale the antenna to it.",
+                "Model bu frekansta elektriksel olarak çok büyük (~{} parça, sınır {}). Frekansı düşürün ya da anteni ona göre ölçekleyin.",
+                n,
+                MAX_UNKNOWNS
+            )),
         }
     }
 }
@@ -270,6 +282,14 @@ pub fn mesh(antenna: &Antenna) -> Result<Mesh, SolveError> {
         return Err(SolveError::NoWires);
     }
     let lambda = C0 / antenna.frequency;
+    if !(lambda.is_finite() && lambda > 0.0) {
+        return Err(SolveError::Singular);
+    }
+    // Bellek ayırmadan önce boyut denetimi (çok yüksek frekans girilince donmasın).
+    let total: usize = antenna.wires.iter().map(|w| if w.length().is_finite() { w.segment_count(lambda) } else { 0 }).sum();
+    if total > MAX_UNKNOWNS {
+        return Err(SolveError::TooLarge(total));
+    }
     let tol = junction_tolerance(antenna, lambda);
     let grounded = !antenna.ground.is_free();
     let mut basis = Vec::new();

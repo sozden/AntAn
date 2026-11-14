@@ -3,9 +3,11 @@
 mod app;
 mod compute;
 mod editor;
+mod heightscan;
 mod optim_ui;
 mod project;
 mod shot;
+mod suggest;
 mod theme;
 mod view3d;
 mod viz;
@@ -16,7 +18,7 @@ fn main() -> eframe::Result {
         .ok()
         .and_then(|s| s.split_once('x').and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?])))
         .unwrap_or([1560.0, 940.0]);
-    let mut viewport = eframe::egui::ViewportBuilder::default().with_title("AntAn").with_inner_size(size).with_min_inner_size([1100.0, 700.0]);
+    let mut viewport = eframe::egui::ViewportBuilder::default().with_title("AntAn").with_app_id("antan").with_inner_size(size).with_min_inner_size([1100.0, 700.0]);
     if let Some(icon) = app_icon() {
         viewport = viewport.with_icon(icon);
     }

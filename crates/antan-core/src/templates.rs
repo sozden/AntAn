@@ -48,10 +48,11 @@ pub enum Kind {
     GroundVertical,
     TrapDipole,
     LoadedVertical,
+    LoadedDipole,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 10] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon, Kind::GroundVertical, Kind::TrapDipole, Kind::LoadedVertical];
+    pub const ALL: [Kind; 11] = [Kind::Dipole, Kind::InvertedV, Kind::FoldedDipole, Kind::LoadedDipole, Kind::Quad2, Kind::DeltaLoop, Kind::GroundPlane, Kind::Moxon, Kind::GroundVertical, Kind::TrapDipole, Kind::LoadedVertical];
     pub fn label(self) -> &'static str {
         match self {
             Kind::Dipole => crate::i18n::t("Half-wave dipole", "Yarım dalga dipol"),
@@ -64,6 +65,7 @@ impl Kind {
             Kind::GroundVertical => crate::i18n::t("Quarter-wave vertical (ground-mounted)", "Çeyrek dalga dikey (zemine bağlı)"),
             Kind::TrapDipole => crate::i18n::t("Trap dipole 40/80 m (W3DZZ style)", "Tuzaklı dipol 40/80 m (W3DZZ tarzı)"),
             Kind::LoadedVertical => crate::i18n::t("Coil-loaded short vertical (λ/8)", "Bobin yüklü kısa dikey (λ/8)"),
+            Kind::LoadedDipole => crate::i18n::t("Coil-loaded short dipole (half size)", "Bobinle kısaltılmış dipol (yarı boy)"),
         }
     }
     pub fn build(self, frequency: f64, tube: &Tube) -> Antenna {
@@ -78,6 +80,7 @@ impl Kind {
             Kind::GroundVertical => ground_vertical(frequency, tube),
             Kind::TrapDipole => crate::loading::trap_dipole(tube),
             Kind::LoadedVertical => crate::loading::loaded_vertical(frequency, tube),
+            Kind::LoadedDipole => crate::loading::loaded_dipole(frequency, 0.24, tube),
         }
     }
 }
@@ -228,4 +231,40 @@ pub fn ground_vertical(frequency: f64, tube: &Tube) -> Antenna {
     let mut a = Antenna::new(crate::i18n::t("Vertical (ground-mounted)", "Dikey (zemine bağlı)"), frequency, vec![wire(crate::i18n::t("Vertical", "Dikey"), [0.0; 3], [0.0, 0.0, 0.243 * lambda], tube)], vec![source(0, 0.0)]);
     a.ground = crate::geometry::Ground::Real { permittivity: 13.0, conductivity: 0.005 };
     a
+}
+
+/// Serbest tel uçları arasındaki boşluklar (ör. Moxon'da sürülen ve yansıtıcı
+/// kuyrukları arası). Her serbest uç için en yakın başka telin serbest ucu,
+/// `max` mesafeden yakınsa ve iki tel de boşluk doğrultusunda uzanıyorsa
+/// (uç uca bakan teller; Yagi eleman uçları gibi yan yana uçlar sayılmaz):
+/// (tel a, tel b, uzaklık m). Çiftler tekrarsız.
+pub fn open_end_gaps(a: &Antenna, max: f64) -> Vec<(usize, usize, f64)> {
+    let tol = 1e-6_f64.max(1e-4 * a.wires.iter().map(|w| w.length()).fold(0.0, f64::max));
+    let dist = |p: Vec3, q: Vec3| ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
+    let grounded = !a.ground.is_free();
+    let mut ends = Vec::new();
+    for (i, w) in a.wires.iter().enumerate() {
+        for p in [w.start, w.end] {
+            let joined = a.wires.iter().enumerate().any(|(j, o)| j != i && (dist(p, o.start) < tol || dist(p, o.end) < tol));
+            let on_ground = grounded && p[2].abs() < tol;
+            if !joined && !on_ground {
+                ends.push((i, p));
+            }
+        }
+    }
+    let mut out: Vec<(usize, usize, f64)> = Vec::new();
+    for &(i, p) in &ends {
+        let best = ends.iter().filter(|(j, _)| *j != i).map(|&(j, q)| (j, q, dist(p, q))).min_by(|x, y| x.2.total_cmp(&y.2));
+        if let Some((j, q, d)) = best {
+            let g = [(q[0] - p[0]) / d.max(1e-12), (q[1] - p[1]) / d.max(1e-12), (q[2] - p[2]) / d.max(1e-12)];
+            let along = |k: usize| {
+                let u = a.wires[k].direction();
+                (u[0] * g[0] + u[1] * g[1] + u[2] * g[2]).abs() > 0.9
+            };
+            if d < max && along(i) && along(j) && !out.iter().any(|&(a2, b2, d2)| ((a2 == i && b2 == j) || (a2 == j && b2 == i)) && (d2 - d).abs() < tol) {
+                out.push((i, j, d));
+            }
+        }
+    }
+    out
 }
