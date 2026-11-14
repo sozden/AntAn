@@ -240,6 +240,8 @@ In **Ground and height**:
   takeoff angle against height, with a table of F/B, impedance and SWR. Hover the chart to read
   values; click it (or *apply* in the table) to set that height on the model.
 
+![Height scan of a 20 m dipole over average soil](guide/en/heightscan.png)
+
 With ground, a **Takeoff angle** card appears — the elevation of maximum radiation. Higher antennas
 give lower angles (better for DX). The horizontal cut is then taken at the takeoff angle.
 
@@ -298,6 +300,8 @@ Anything that is not an element-based Yagi is a **wire model**.
 driven and reflector tails of a Moxon — the distance is listed in **Gaps between wire ends** and
 drawn as an amber dashed dimension in the 3D view.
 
+![Moxon with the tail gaps listed and dimensioned](guide/en/moxon-gap.png)
+
 ## 11. Loads: coils, capacitors and traps
 
 ![Loads section](guide/en/panel-loads.png)
@@ -327,6 +331,8 @@ solves them and lists gain, front/back, feed impedance, SWR and the largest dime
 (amber above 12 m, red above 25 m). **Open** loads one as a new design. Beams and wire antennas are
 compared in free space; verticals with their ground.
 
+![Antenna suggestions for 14.175 MHz](guide/en/suggest.png)
+
 ## 13. LFA Yagi (loop fed array)
 
 In an LFA (G0KSC style) the driven element is a rectangular **loop lying in the element plane**,
@@ -336,6 +342,8 @@ this solver. Any Yagi can be switched with the **LFA driven loop** checkbox unde
 the driven element's length is then the loop's long side and **loop width** is measured along the
 boom. The cut list shows the loop sides; no boom correction is applied to the loop. The starting
 directors are the standard ones — run the Optimization tab for the best front/back.
+
+![7-element LFA Yagi; the LFA driven loop option is under the element table](guide/en/lfa.png)
 
 ## 14. Files
 

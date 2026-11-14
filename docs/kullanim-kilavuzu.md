@@ -237,6 +237,8 @@ Sonuç tasarıma uygulanır ve geri alınabilir.
   açısını yüksekliğe göre çizer, Ö/A, empedans ve SWR'yi tabloda verir. Fareyle grafikte değer
   okunur; grafiğe tıklayınca (ya da tablodaki *uygula*) o yükseklik modele uygulanır.
 
+![Ortalama toprak üzerinde 20 m dipolün yükseklik taraması](guide/tr/heightscan.png)
+
 Zemin varken **Kalkış açısı** kartı çıkar: en güçlü ışımanın yükseliş açısı. Anten yükseldikçe açı
 düşer (DX için daha iyi). Yatay kesit de bu durumda kalkış açısında alınır.
 
@@ -298,6 +300,8 @@ Eleman bazlı Yagi olmayan her şey bir **tel modelidir**.
 yansıtıcı kuyrukları arası — mesafe **Tel uçları arası boşluklar** bölümünde listelenir ve 3B
 görünümde turuncu kesikli ölçü çizgisiyle gösterilir.
 
+![Kuyruk boşlukları listelenmiş ve ölçülendirilmiş Moxon](guide/tr/moxon-gap.png)
+
 ## 11. Yükler: bobin, kondansatör ve tuzak
 
 ![Yüklemeler bölümü](guide/tr/panel-loads.png)
@@ -326,6 +330,8 @@ dikeyler — kurar, çözer ve kazanç, ön/arka, besleme empedansı, SWR ve en 
 listeler (12 m üstü turuncu, 25 m üstü kırmızı). **Aç** birini yeni tasarım olarak yükler. Beam ve
 tel antenler serbest uzayda, dikeyler zeminleriyle karşılaştırılır.
 
+![14.175 MHz için anten önerileri](guide/tr/suggest.png)
+
 ## 13. LFA Yagi (halka beslemeli)
 
 LFA'da (G0KSC tarzı) sürülen eleman, **eleman düzleminde yatan dikdörtgen bir halkadır**; çevresi
@@ -335,6 +341,8 @@ oluşturur. Her Yagi, eleman tablosunun altındaki **LFA sürülen halka** kutus
 çevrilebilir: sürülen elemanın boyu halkanın uzun kenarı olur, **halka genişliği** bum boyunca
 ölçülür. Kesim listesi halka kenarlarını verir; halkaya bum düzeltmesi uygulanmaz. Başlangıçtaki
 yönlendiriciler standart olanlardır — en iyi ön/arka için İyileştirme sekmesini çalıştırın.
+
+![7 elemanlı LFA Yagi; LFA sürülen halka seçeneği eleman tablosunun altında](guide/tr/lfa.png)
 
 ## 14. Dosyalar
 
