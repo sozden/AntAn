@@ -4,6 +4,8 @@ mod app;
 mod compute;
 mod editor;
 mod heightscan;
+mod stackwin;
+mod matchjob;
 mod optim_ui;
 mod project;
 mod shot;

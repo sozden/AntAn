@@ -24,10 +24,12 @@ with a worked example and then covers each feature.
 11. [Loads: coils, capacitors and traps](#11-loads-coils-capacitors-and-traps)
 12. [Antenna suggestions](#12-antenna-suggestions)
 13. [LFA Yagi (loop fed array)](#13-lfa-yagi-loop-fed-array)
-14. [Files](#14-files)
-15. [Keyboard shortcuts](#15-keyboard-shortcuts)
-16. [Troubleshooting](#16-troubleshooting)
-17. [Accuracy and limitations](#17-accuracy-and-limitations)
+14. [Stacking](#14-stacking)
+15. [Magnetic loop](#15-magnetic-loop)
+16. [Files](#16-files)
+17. [Keyboard shortcuts](#17-keyboard-shortcuts)
+18. [Troubleshooting](#18-troubleshooting)
+19. [Accuracy and limitations](#19-accuracy-and-limitations)
 
 ## 1. Installation
 
@@ -132,6 +134,10 @@ In **Tube profile (tapered element)**:
   Example: 100 mm of Ø16, then 80 mm of Ø12, the rest Ø10. All elements use the same profile.
 
 Diameter, wall thickness and material all enter the calculation (conductor loss and skin effect).
+A new Yagi's element lengths are already corrected for the tube thickness: a tube that is thick
+compared with the wavelength resonates shorter, so on 70 cm the same 10 mm tube gives shorter
+elements than on 2 m. The driven element of a new Yagi is set to resonance (X = 0). The same
+correction is applied when a band is changed with **scale** checked.
 
 ### 4.4 Element positions and lengths
 
@@ -203,6 +209,14 @@ hairpin* below to see the final matched SWR curve.
 **Auto-tune the driven element** changes the driven element length with the full solver:
 *Make resonant* (X = 0, for gamma or direct feed) or *Make capacitive for hairpin*. The result is
 applied to the design and can be undone.
+
+**🎯 Match to Z₀** brings the feed impedance to the line impedance (e.g. 50 Ω) *without* a matching
+device. It changes only the driven element and the first director — their lengths and boom
+positions — and leaves the reflector and the other directors where they are, so gain and pattern
+barely change. It runs in the background for a second or two; the result line shows SWR, gain and
+F/B before and after, and Ctrl+Z undoes it. Example: a 7-element Yagi for 70 cm went from SWR 2.32 to
+1.00 for 0.2 dB of gain. For a full redesign (all elements) use the Optimization tab with a high SWR
+weight.
 
 ## 7. Optimization
 
@@ -345,13 +359,78 @@ directors are the standard ones — run the Optimization tab for the best front/
 
 ![7-element LFA Yagi; the LFA driven loop option is under the element table](guide/en/lfa.png)
 
-## 14. Files
+## 14. Stacking
+
+**☰ Stack** (toolbar) puts two or four copies of the current antenna side by side or on top of each
+other and feeds them in phase with equal power, as with equal-length cables and a power divider.
+Mutual coupling between the antennas is calculated, not estimated. Layouts: 2, 3 or 4 stacked
+vertically, 2 or 4 side by side, and 2 × 2 (H-frame). The stack is saved with the project, and all
+views then show the whole stack:
+
+- The **Gain** card shows how much the stack adds over one antenna.
+- A **Stack** card shows the spacings and each antenna's own feed impedance. These differ a little
+  because of mutual coupling.
+- The SWR and impedance are those at the input of the power divider.
+
+The window suggests the **DL6WU spacing** for each direction, D = λ / (2·sin(θ/2)), where θ is the
+single antenna's −3 dB beamwidth in that plane. A narrower beam needs a wider spacing. **▶ Scan**
+solves the stack over a range of spacings and plots gain and the highest side lobe. The
+gain maximum is usually somewhat beyond the DL6WU spacing. DL6WU's value is a good compromise with
+lower side lobes. Click the chart or **apply** in the table to use a spacing.
+
+Example: two 5-element 2 m Yagis gain +3.15 dB at 1.25 λ, four (2 × 2) gain +6.2 dB.
+
+![Spacing scan for two stacked 5-element Yagis](guide/en/stack.png)
+
+Notes: the boom, mast and cables are not modelled, and the power divider is ideal. Over ground the
+lowest antenna stays at the height you set and the others go above it. Very large stacks of long
+UHF Yagis can reach the solver's size limit.
+
+## 15. Magnetic loop
+
+**➕ New → Magnetic loop** creates a small transmitting loop: a copper tube loop (octagon, 16-gon or
+≈ circle) about 0.1 λ around, a tuning capacitor at the top and a small coupling loop at the bottom.
+The design is already matched to 50 Ω and tuned. The **Magnetic loop** section on the right sets:
+
+- the loop diameter, shape and tube;
+- the coupling loop diameter, its gap to the main loop and its wire;
+- the capacitor and its loss resistance (ESR): a butterfly or vacuum capacitor is about 5–10 mΩ,
+  an ordinary air variable with wiper contacts 20–100 mΩ;
+- the transmitter power.
+
+**🎯 Tune capacitor** sets the capacitor for the lowest SWR. This also happens automatically when you
+change the frequency, just like turning the capacitor of a real loop. **🎯 Match coupling loop**
+adjusts the coupling loop's diameter and gap for SWR ≈ 1. With the usual "1/5 of the loop" rule the
+SWR is often 2–6. The optimum is usually nearer 1/8–1/10.
+
+The cards under the 3D view show what matters for a loop:
+
+| Card | Meaning |
+|---|---|
+| Tuning capacitor | the value now, and the range needed to cover the whole band |
+| Capacitor voltage | peak voltage across the capacitor at the transmitter power: several kV even at 100 W, choose the capacitor for it |
+| Loop Q | and the −3 dB bandwidth. The SWR < 2 band is only a few kHz on 40 m. |
+| Efficiency | radiated power / input power, after tube and capacitor loss |
+
+The sweep is automatically narrow (±0.06 %) because of the high Q. Example (40 m, 1.34 m loop of
+22 mm copper, 10 mΩ capacitor): 138 pF, 8.4 kV at 100 W, Q ≈ 2200, efficiency 25 %.
+
+![Magnetic loop for 40 m](guide/en/magloop.png)
+
+**Direct feed (analysis)** feeds the main loop itself. It shows the loop's own resistance (tens of
+milliohms) for comparison with formulas, and is not meant as a real feed.
+
+The calculation does not include solder and clamp contact resistance, the proximity effect or
+nearby objects such as walls and railings. Soil loss does not enter the feed impedance (section 8),
+so the real efficiency of a loop close to the ground is lower than shown.
+
+## 16. Files
 
 - **File → Save / Save as** stores the project as a `.antan` file (readable JSON). **Open** loads it.
 - **File → Export as NEC-2 file** writes a NEC card deck for comparing with 4nec2, xnec2c or EZNEC.
 - **File → Save window as PNG** saves a picture of the program window.
 
-## 15. Keyboard shortcuts
+## 17. Keyboard shortcuts
 
 | Keys | Action |
 |---|---|
@@ -363,7 +442,7 @@ directors are the standard ones — run the Optimization tab for the best front/
 | Mouse wheel (3D) | Zoom |
 | Double-click (3D) | Reset view |
 
-## 16. Troubleshooting
+## 18. Troubleshooting
 
 | Message or symptom | Cause and fix |
 |---|---|
@@ -371,18 +450,25 @@ directors are the standard ones — run the Optimization tab for the best front/
 | *Source … is not at a valid point* | The feed is at a free wire end. Move it to the center (0.5), or to an end that joins another wire or the ground. |
 | *Wire … goes below ground* | With ground enabled every wire must have z ≥ 0. Raise the antenna (Shift all / Boom height). |
 | *Load … is not at a valid point* | Loads must be inside a wire or where exactly two wires meet. |
-| SWR is high | Use the Matching tab, or let the optimizer include SWR. |
+| SWR is high | Try **🎯 Match to Z₀** in the Matching tab, or let the optimizer include SWR with a high weight. On UHF also check the warning below. |
+| ⚠ *… is very thick for this frequency* / *thin-wire limit* | The element diameter is more than 0.02 λ (e.g. a 10 mm tube on 23 cm). Like NEC, AntAn uses a thin-wire model, which is not reliable for such thick conductors — the SWR in particular can be far off. Use a thinner tube or rod (3–4 mm is usual on 23 cm). Above 0.1 λ the model is not solved at all. |
+| ⚠ *segments are only … × the wire radius* | Too many segments were set by hand for a thick wire. Choose *auto* or fewer segments. |
 | "Tune L to resonance" fails | Start from a smaller inductance; very large coils can resonate with the wire beyond them. |
 | *The model is electrically too large at this frequency* | The frequency is far above what the geometry was made for. Lower it, or use **Scale the antenna to this frequency** under the frequency field. |
-| Results differ slightly from NEC | Normal — a few percent is expected between programs. |
+| Results differ slightly from NEC | Expected — see section 19 and the [comparison report](validation.md). |
+| Magnetic loop: *cannot be tuned with a capacitor* | The loop is too large for this frequency (above its self-resonance). Use a smaller diameter. |
 
-## 17. Accuracy and limitations
+## 19. Accuracy and limitations
 
 AntAn uses a thin-wire method-of-moments solver that was checked against known results: the
 half-wave dipole (≈ 73 + j42 Ω, 2.15 dBi), energy conservation, image theory over ground and more —
 see the [README](../README.md) for the full list.
 
-- Differences of a few percent from NEC are normal.
+- AntAn has been compared case by case with the NEC-2 and MININEC engines: see the
+  [comparison report](validation.md). In short: gain agrees with NEC-2 within a few tenths of a dB
+  and with MININEC (MMANA-GAL) within 0.01 dB. For antennas made of tubing, AntAn finds the
+  resonant frequency about 1 % higher than NEC-2, which is the usual MMANA-vs-EZNEC difference.
+  Leave some length for trimming.
 - Over real ground, soil loss is not part of the feed impedance (section 8).
 - The gamma match model is approximate.
 - Very thick wires, very short segments and wires that come extremely close to each other reduce

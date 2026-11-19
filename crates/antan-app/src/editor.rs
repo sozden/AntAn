@@ -218,7 +218,8 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
             let lambda = C0 / app.project.model.frequency();
             let biggest = app.project.model.largest_dimension();
             let off = app.project.design_frequency().map(|g| (g / app.project.model.frequency()).ln().abs() > 0.25_f64.ln_1p()).unwrap_or(false);
-            if biggest > 4.0 * lambda || biggest < 0.05 * lambda || off {
+            // Manyetik loop bilerek küçüktür ve frekans değişince kondansatörle ayarlanır.
+            if app.project.magloop.is_none() && (biggest > 4.0 * lambda || biggest < 0.05 * lambda || off) {
                 ui.label("");
                 ui.vertical(|ui| {
                     let msg = match app.project.design_frequency() {
@@ -241,7 +242,18 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
         });
     });
 
+    if !app.warnings.is_empty() {
+        egui::Frame::new().fill(Color32::from_rgb(60, 44, 20)).corner_radius(6.0).inner_margin(8.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            for w in &app.warnings {
+                ui.label(RichText::new(format!("⚠ {w}")).color(theme::WARM));
+            }
+        });
+    }
     ground_section(app, ui);
+    if app.project.magloop.is_some() {
+        loop_section(app, ui);
+    }
 
     let selected = app.selected;
     match &mut app.project.model {
@@ -255,6 +267,121 @@ pub fn properties(app: &mut AntAnApp, ui: &mut egui::Ui) {
     section(ui, tl("Notes", "Notlar"), false, |ui| {
         ui.add(egui::TextEdit::multiline(&mut app.project.notes).desired_rows(4).desired_width(f32::INFINITY));
     });
+}
+
+/// Manyetik loop parametreleri, kondansatör ayarı ve kuplaj halkası eşlemesi.
+fn loop_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
+    let Some(mut m) = app.project.magloop.clone() else { return };
+    let f = app.project.model.frequency();
+    let lambda = C0 / f;
+    let mut tune = false;
+    let mut do_match = false;
+    section(ui, tl("Magnetic loop", "Manyetik loop"), true, |ui| {
+        egui::Grid::new("loop_grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+            ui.label(tl("Loop diameter", "Halka çapı"));
+            ui.add(egui::DragValue::new(&mut m.diameter).range(0.05..=20.0).speed(0.005).max_decimals(3).suffix(" m"));
+            ui.end_row();
+            ui.label(tl("  circumference", "  çevre"));
+            ui.label(RichText::new(format!("{:.2} m = {:.3} λ", m.circumference(), m.circumference() / lambda)).color(theme::TEXT_DIM));
+            ui.end_row();
+            ui.label(tl("Shape", "Biçim"));
+            ui.horizontal(|ui| {
+                for (n, l) in [(8usize, tl("octagon", "sekizgen")), (16, tl("16-gon", "16 kenar")), (24, tl("≈ circle", "≈ daire"))] {
+                    ui.selectable_value(&mut m.sides, n, l);
+                }
+            });
+            ui.end_row();
+            ui.label(tl("Tube", "Boru"));
+            let mut d = m.tube.diameter * MM;
+            if ui.add(egui::DragValue::new(&mut d).range(1.0..=200.0).speed(0.2).suffix(" mm")).changed() {
+                m.tube.diameter = d / MM;
+            }
+            ui.end_row();
+            ui.label(tl("  material", "  malzeme"));
+            ui.horizontal(|ui| {
+                let cu = m.tube.material.name == "Copper";
+                if ui.selectable_label(cu, tl("copper", "bakır")).on_hover_text(Material::copper().display_name()).clicked() {
+                    m.tube.material = Material::copper();
+                }
+                if ui.selectable_label(!cu, tl("aluminum", "alüminyum")).on_hover_text(Material::aluminum_6063().display_name()).clicked() {
+                    m.tube.material = Material::aluminum_6063();
+                }
+            });
+            ui.end_row();
+            ui.label(tl("Coupling loop", "Kuplaj halkası"));
+            ui.horizontal(|ui| {
+                let mut direct = !m.coupled();
+                if ui.checkbox(&mut direct, tl("direct feed (analysis)", "doğrudan besleme (analiz)")).on_hover_text(tl("Feeds the main loop directly at the bottom: shows the loop's own resistance (milliohms). Not for real use.", "Ana halkayı alttan doğrudan besler: halkanın kendi direncini (miliohm) gösterir. Gerçek kullanım için değildir.")).changed() {
+                    m.coupling_ratio = if direct { 0.0 } else { 0.2 };
+                    tune = true;
+                }
+            });
+            ui.end_row();
+            if m.coupled() {
+                ui.label(tl("  diameter", "  çapı"));
+                ui.horizontal(|ui| {
+                    let mut dc = m.coupling_ratio * m.diameter * MM;
+                    if ui.add(egui::DragValue::new(&mut dc).range(10.0..=m.diameter * 600.0).speed(1.0).suffix(" mm")).changed() {
+                        m.coupling_ratio = dc / MM / m.diameter;
+                    }
+                    ui.label(RichText::new(format!("D/{:.1}", 1.0 / m.coupling_ratio)).color(theme::TEXT_DIM));
+                });
+                ui.end_row();
+                ui.label(tl("  gap to loop", "  halkaya açıklık"));
+                let mut g = m.coupling_gap * MM;
+                if ui.add(egui::DragValue::new(&mut g).range(0.0..=500.0).speed(0.5).suffix(" mm")).changed() {
+                    m.coupling_gap = g / MM;
+                }
+                ui.end_row();
+                ui.label(tl("  wire", "  tel"));
+                let mut w = m.coupling_wire * MM;
+                if ui.add(egui::DragValue::new(&mut w).range(0.5..=30.0).speed(0.1).suffix(" mm")).changed() {
+                    m.coupling_wire = w / MM;
+                }
+                ui.end_row();
+            }
+            ui.label(tl("Tuning capacitor", "Ayar kondansatörü"));
+            let mut c = m.capacitance * 1e12;
+            if ui.add(egui::DragValue::new(&mut c).range(0.5..=20000.0).speed(0.05).max_decimals(2).suffix(" pF")).changed() {
+                m.capacitance = c / 1e12;
+            }
+            ui.end_row();
+            ui.label(tl("  ESR (loss)", "  ESR (kayıp)"));
+            let mut r = m.cap_esr * 1e3;
+            if ui.add(egui::DragValue::new(&mut r).range(0.0..=1000.0).speed(0.2).suffix(" mΩ")).on_hover_text(tl("Butterfly or vacuum capacitor ≈ 5–10 mΩ, ordinary air variable with wiper contacts ≈ 20–100 mΩ.", "Kelebek ya da vakum kondansatör ≈ 5–10 mΩ, sürtünmeli kontaklı sıradan döner kondansatör ≈ 20–100 mΩ.")).changed() {
+                m.cap_esr = r / 1e3;
+            }
+            ui.end_row();
+            ui.label(tl("Transmitter power", "Verici gücü"));
+            ui.add(egui::DragValue::new(&mut app.project.tx_power).range(0.1..=5000.0).speed(1.0).suffix(" W"));
+            ui.end_row();
+        });
+        ui.horizontal_wrapped(|ui| {
+            if ui.button(tl("🎯 Tune capacitor", "🎯 Kondansatörü ayarla")).on_hover_text(tl("Sets the capacitor for the lowest SWR at the current frequency (done automatically when the frequency changes)", "Kondansatörü şimdiki frekansta en düşük SWR'ye ayarlar (frekans değişince kendiliğinden yapılır)")).clicked() {
+                tune = true;
+            }
+            if m.coupled() && ui.button(tl("🎯 Match coupling loop", "🎯 Kuplaj halkasını eşle")).on_hover_text(tl("Adjusts the coupling loop diameter and its gap to the main loop for SWR ≈ 1", "SWR ≈ 1 için kuplaj halkasının çapını ve ana halkaya açıklığını ayarlar")).clicked() {
+                do_match = true;
+            }
+        });
+        ui.label(RichText::new(tl("Not included: solder and clamp contact resistance, proximity effect, nearby objects (walls, railings). Real-ground loss does not enter the impedance — near the ground the real efficiency is lower.", "Hesaba girmeyenler: lehim ve kelepçe kontak direnci, yakınlık etkisi, yakındaki nesneler (duvar, korkuluk). Gerçek zemin kaybı empedansa girmez — yere yakın kurulumda gerçek verim daha düşüktür.")).small().color(theme::TEXT_DIM));
+    });
+    if app.project.magloop.as_ref() != Some(&m) {
+        app.project.magloop = Some(m);
+        app.project.rebuild_loop();
+    }
+    if do_match {
+        app.status = match app.project.match_loop() {
+            Some(s) => tf!("Coupling loop matched: SWR {:.2}", "Kuplaj halkası eşlendi: SWR {:.2}", s),
+            None => tl("Coupling loop could not be matched", "Kuplaj halkası eşlenemedi").into(),
+        };
+    } else if tune {
+        app.status = if app.project.retune_loop() {
+            tl("Capacitor tuned", "Kondansatör ayarlandı").into()
+        } else {
+            tl("The loop cannot be tuned with a capacitor at this frequency (it is too large: above its self-resonance)", "Halka bu frekansta kondansatörle ayarlanamaz (çok büyük: kendi rezonansının üstünde)").into()
+        };
+    }
 }
 
 fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
@@ -343,7 +470,7 @@ fn ground_section(app: &mut AntAnApp, ui: &mut egui::Ui) {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(tf!("Height range: {:.0} … {:.0} mm", "Yükseklik aralığı: {:.0} … {:.0} mm", lo[2] * MM, hi[2] * MM)).small().color(theme::TEXT_DIM));
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(tl("Shift all (z)", "Tümünü kaydır (z)"));
                     for (l, dz) in [("−λ/4", -0.25), ("−1 m", -1.0 / lambda), ("+1 m", 1.0 / lambda), ("+λ/4", 0.25)] {
                         if ui.small_button(l).clicked() {
@@ -921,8 +1048,10 @@ fn wire_editor(ui: &mut egui::Ui, a: &mut Antenna, selected: usize) {
             });
             ui.end_row();
             ui.label(tl("Position", "Konum"));
+            ui.add(egui::Slider::new(&mut s.position, 0.0..=1.0).max_decimals(3));
+            ui.end_row();
+            ui.label("");
             ui.horizontal(|ui| {
-                ui.add(egui::Slider::new(&mut s.position, 0.0..=1.0).max_decimals(3));
                 for (l, v) in [(tl("start", "baş"), 0.0), (tl("center", "orta"), 0.5), (tl("end", "son"), 1.0)] {
                     if ui.small_button(l).clicked() {
                         s.position = v;

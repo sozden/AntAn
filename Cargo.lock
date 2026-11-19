@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "antan"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "antan-core",
  "eframe",
@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "antan-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "num-complex",
  "serde",

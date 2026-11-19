@@ -24,10 +24,12 @@ borularıyla, herhangi bir anteni de teller kümesi olarak. AntAn empedansını,
 11. [Yükler: bobin, kondansatör ve tuzak](#11-yükler-bobin-kondansatör-ve-tuzak)
 12. [Anten önerileri](#12-anten-önerileri)
 13. [LFA Yagi (halka beslemeli)](#13-lfa-yagi-halka-beslemeli)
-14. [Dosyalar](#14-dosyalar)
-15. [Klavye kısayolları](#15-klavye-kısayolları)
-16. [Sorun giderme](#16-sorun-giderme)
-17. [Doğruluk ve sınırlar](#17-doğruluk-ve-sınırlar)
+14. [İstif](#14-i̇stif)
+15. [Manyetik loop](#15-manyetik-loop)
+16. [Dosyalar](#16-dosyalar)
+17. [Klavye kısayolları](#17-klavye-kısayolları)
+18. [Sorun giderme](#18-sorun-giderme)
+19. [Doğruluk ve sınırlar](#19-doğruluk-ve-sınırlar)
 
 ## 1. Kurulum
 
@@ -131,6 +133,10 @@ Sağ paneldeki **Anten** bölümünde:
   sonra 80 mm Ø12, geri kalanı Ø10. Bütün elemanlar aynı profili kullanır.
 
 Çap, et kalınlığı ve malzeme hesaba girer (iletken kaybı ve deri etkisi).
+Yeni bir Yagi'nin eleman boyları boru kalınlığına göre zaten düzeltilmiştir: dalga boyuna göre
+kalın bir boru daha kısa boyda rezonansa gelir; bu yüzden aynı 10 mm boru 70 cm'de 2 m'dekinden daha
+kısa elemanlar verir. Yeni Yagi'nin sürülen elemanı rezonansa (X = 0) ayarlanır. **ölçekle**
+işaretliyken bant değiştirince de aynı düzeltme uygulanır.
 
 ### 4.4 Eleman konumları ve boyları
 
@@ -201,6 +207,14 @@ kullanınca eşlenmiş son SWR eğrisini görürsünüz.
 **Sürülen elemanı otomatik ayarla**, sürülen eleman boyunu gerçek çözücüyle değiştirir:
 *Rezonansa getir* (X = 0, gamma ya da doğrudan besleme için) veya *Hairpin için kapasitif yap*.
 Sonuç tasarıma uygulanır ve geri alınabilir.
+
+**🎯 Z₀'a eşle**, besleme empedansını eşleme düzeneği *olmadan* hat empedansına (ör. 50 Ω) getirir.
+Yalnız sürülen elemanı ve ilk yönlendiriciyi — boylarını ve bum konumlarını — değiştirir; yansıtıcı
+ve diğer yönlendiriciler yerinde kalır, bu yüzden kazanç ve diyagram pek değişmez. Arka planda bir
+iki saniye çalışır; sonuç satırı SWR, kazanç ve Ö/A'nın önceki ve sonraki değerlerini gösterir,
+Ctrl+Z geri alır. Örnek: 70 cm için 7 elemanlı bir Yagi 0,2 dB kazanç karşılığında SWR 2,32'den
+1,00'e indi. Bütün elemanları içeren yeniden tasarım için İyileştirme sekmesini yüksek SWR
+ağırlığıyla kullanın.
 
 ## 7. İyileştirme
 
@@ -344,7 +358,72 @@ yönlendiriciler standart olanlardır — en iyi ön/arka için İyileştirme se
 
 ![7 elemanlı LFA Yagi; LFA sürülen halka seçeneği eleman tablosunun altında](guide/tr/lfa.png)
 
-## 14. Dosyalar
+## 14. İstif
+
+**☰ İstif** (araç çubuğu), şu anki antenin iki ya da dört kopyasını yan yana ya da üst üste dizer
+ve eşit boylu kablolar ile güç bölücüde olduğu gibi aynı fazda, eşit güçle besler. Antenler arası
+karşılıklı etki tahmin edilmez, hesaplanır. Düzenler: 2, 3 ya da 4 anten üst üste, 2 ya da 4 yan
+yana ve 2 × 2 (H çerçeve). İstif projeyle kaydedilir ve bütün görünümler istifin tamamını gösterir:
+
+- **Kazanç** kartı istifin tek antene göre kazandırdığını gösterir.
+- **İstif** kartı aralıkları ve her antenin kendi besleme empedansını verir. Bu empedanslar
+  karşılıklı etki yüzünden biraz farklıdır.
+- SWR ve empedans, güç bölücü girişindeki değerlerdir.
+
+Pencere her doğrultu için **DL6WU aralığını** önerir: D = λ / (2·sin(θ/2)). Burada θ, tek antenin
+o düzlemdeki −3 dB huzme genişliğidir. Huzme ne kadar darsa aralık o kadar büyür. **▶ Tara**
+istifi bir aralık boyunca çözer ve kazancı ile en yüksek yan lobu çizer. Kazancın en
+yükseği genellikle DL6WU aralığının biraz ötesindedir. DL6WU'nun değeri, yan lobları daha düşük
+tutan iyi bir uzlaşmadır. Bir aralığı kullanmak için grafiğe ya da tablodaki **uygula**'ya tıklayın.
+
+Örnek: iki adet 5 elemanlı 2 m Yagi 1,25 λ'da +3,15 dB, dört tanesi (2 × 2) +6,2 dB kazandırır.
+
+![İki adet 5 elemanlı Yagi'nin aralık taraması](guide/tr/stack.png)
+
+Notlar: bum, direk ve kablolar modellenmez, güç bölücü idealdir. Zemin üzerinde en alttaki anten
+ayarladığınız yükseklikte kalır, diğerleri onun üstüne dizilir. Uzun UHF Yagi'lerden çok büyük
+istifler çözücünün büyüklük sınırına ulaşabilir.
+
+## 15. Manyetik loop
+
+**➕ Yeni → Manyetik loop** küçük bir verici halka oluşturur: çevresi yaklaşık 0,1 λ olan bakır
+borudan bir halka (sekizgen, 16 kenar ya da ≈ daire), tepesinde ayar kondansatörü, altında küçük bir
+kuplaj halkası. Tasarım 50 Ω'a eşlenmiş ve ayarlanmış olarak gelir. Sağdaki **Manyetik loop**
+bölümünden şunlar ayarlanır:
+
+- halka çapı, biçimi ve borusu;
+- kuplaj halkasının çapı, ana halkaya açıklığı ve teli;
+- kondansatör ve kayıp direnci (ESR): kelebek ya da vakum kondansatör yaklaşık 5–10 mΩ, sürtünmeli
+  kontaklı sıradan döner kondansatör 20–100 mΩ;
+- verici gücü.
+
+**🎯 Kondansatörü ayarla** kondansatörü en düşük SWR'ye getirir. Frekansı değiştirince bu kendiliğinden
+de olur, tıpkı gerçek bir loop'un kondansatörünü çevirmek gibi. **🎯 Kuplaj halkasını eşle** SWR ≈ 1
+için kuplaj halkasının çapını ve açıklığını ayarlar. Bilinen "halkanın 1/5'i" kuralıyla SWR çoğu
+zaman 2–6 çıkar. En uygun değer genellikle 1/8–1/10 civarındadır.
+
+3B görünümün altındaki kartlar loop için önemli olanı gösterir:
+
+| Kart | Anlamı |
+|---|---|
+| Ayar kondansatörü | şimdiki değer ve bütün bandı kapsamak için gereken aralık |
+| Kondansatör gerilimi | verici gücünde kondansatör üzerindeki tepe gerilim: 100 W'ta bile birkaç kV, kondansatörü buna göre seçin |
+| Halka Q'su | ve −3 dB bant genişliği. SWR < 2 bandı 40 m'de yalnız birkaç kHz'dir. |
+| Verim | ışıyan güç / giriş gücü (boru ve kondansatör kaybı düşülmüş) |
+
+Q yüksek olduğu için tarama kendiliğinden dardır (±%0,06). Örnek (40 m, 22 mm bakırdan 1,34 m
+halka, 10 mΩ kondansatör): 138 pF, 100 W'ta 8,4 kV, Q ≈ 2200, verim %25.
+
+![40 m için manyetik loop](guide/tr/magloop.png)
+
+**Doğrudan besleme (analiz)** ana halkanın kendisini besler. Halkanın kendi direncini (onlarca
+miliohm) formüllerle karşılaştırmak için gösterir; gerçek besleme için değildir.
+
+Hesaba girmeyenler: lehim ve kelepçe kontak direnci, yakınlık etkisi ve duvar, korkuluk gibi yakındaki
+nesneler. Toprak kaybı besleme empedansına girmediği için (8. bölüm) yere yakın kurulan bir loop'un
+gerçek verimi gösterilenden düşüktür.
+
+## 16. Dosyalar
 
 - **Dosya → Kaydet / Farklı kaydet** projeyi `.antan` dosyası (okunabilir JSON) olarak saklar.
   **Aç** onu yükler.
@@ -352,7 +431,7 @@ yönlendiriciler standart olanlardır — en iyi ön/arka için İyileştirme se
   kart dosyası yazar.
 - **Dosya → Pencereyi PNG olarak kaydet** program penceresinin resmini kaydeder.
 
-## 15. Klavye kısayolları
+## 17. Klavye kısayolları
 
 | Tuşlar | İşlem |
 |---|---|
@@ -364,7 +443,7 @@ yönlendiriciler standart olanlardır — en iyi ön/arka için İyileştirme se
 | Fare tekerleği (3B) | Yakınlaştır |
 | Çift tık (3B) | Görünümü sıfırla |
 
-## 16. Sorun giderme
+## 18. Sorun giderme
 
 | Mesaj ya da belirti | Nedeni ve çözümü |
 |---|---|
@@ -373,17 +452,24 @@ yönlendiriciler standart olanlardır — en iyi ön/arka için İyileştirme se
 | *… tel zeminin (z = 0) altına iniyor* | Zemin açıkken bütün teller z ≥ 0'da olmalıdır. Anteni yükseltin (Tümünü kaydır / Bum yüksekliği). |
 | *… yük geçerli bir noktada değil* | Yük bir telin içinde ya da tam iki telin birleştiği noktada olmalıdır. |
 | *Model bu frekansta elektriksel olarak çok büyük* | Frekans, geometrinin yapıldığı frekansın çok üstünde. Düşürün ya da frekans alanının altındaki **Anteni bu frekansa ölçekle** düğmesini kullanın. |
-| SWR yüksek | Eşleme sekmesini kullanın ya da iyileştiricide SWR'yi hedeflere katın. |
+| SWR yüksek | Eşleme sekmesinde **🎯 Z₀'a eşle**'yi deneyin ya da iyileştiricide SWR'ye yüksek ağırlık verin. UHF'de aşağıdaki uyarıya da bakın. |
+| ⚠ *… bu frekans için çok kalın* / *ince tel sınırı* | Eleman çapı 0,02 λ'dan büyük (ör. 23 cm'de 10 mm boru). AntAn da NEC gibi ince tel modeli kullanır; bu kadar kalın iletkenlerde güvenilir değildir — özellikle SWR çok yanlış çıkabilir. Daha ince boru ya da çubuk kullanın (23 cm'de genelde 3–4 mm). 0,1 λ'nın üstünde model hiç çözülmez. |
+| ⚠ *parçalar tel yarıçapının yalnız … katı* | Kalın bir tele elle çok fazla parça verilmiş. *Otomatik* ya da daha az parça seçin. |
 | "L'yi rezonansa ayarla" sonuç vermiyor | Daha küçük bir endüktanstan başlayın; çok büyük bobinler ötesindeki tel parçasıyla rezonansa girebilir. |
-| Sonuçlar NEC'ten biraz farklı | Normaldir; programlar arasında birkaç yüzdelik fark beklenir. |
+| Sonuçlar NEC'ten biraz farklı | Beklenen bir durum; 19. bölüme ve [karşılaştırma raporuna](dogrulama.md) bakın. |
+| Manyetik loop: *kondansatörle ayarlanamaz* | Halka bu frekans için çok büyük (kendi rezonansının üstünde). Daha küçük çap kullanın. |
 
-## 17. Doğruluk ve sınırlar
+## 19. Doğruluk ve sınırlar
 
 AntAn, bilinen sonuçlarla sınanmış bir ince tel moment yöntemi çözücüsü kullanır: yarım dalga dipol
 (≈ 73 + j42 Ω, 2.15 dBi), enerji korunumu, zemin üzerinde görüntü teorisi ve daha fazlası. Tam liste
 [README](../README.tr.md) dosyasındadır.
 
-- NEC ile birkaç yüzdelik farklar normaldir.
+- AntAn, NEC-2 ve MININEC çekirdekleriyle tek tek karşılaştırıldı: bkz.
+  [karşılaştırma raporu](dogrulama.md). Kısaca: kazanç NEC-2 ile birkaç onda bir dB, MININEC
+  (MMANA-GAL) ile 0,01 dB içinde uyuşur. Borudan yapılmış antenlerde AntAn rezonans frekansını
+  NEC-2'den yaklaşık %1 yüksek bulur; bu, MMANA ile EZNEC arasındaki bilinen farktır. Budama
+  payı bırakın.
 - Gerçek zeminde toprak kaybı besleme empedansına girmez (8. bölüm).
 - Gamma eşleme modeli yaklaşıktır.
 - Her ince tel programında olduğu gibi çok kalın teller, çok kısa parçalar ve birbirine çok yaklaşan

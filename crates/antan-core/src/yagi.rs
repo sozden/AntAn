@@ -32,6 +32,15 @@ impl Profile {
     pub fn uniform(tube: Tube) -> Self {
         Self { sections: Vec::new(), tip: tube }
     }
+    /// Yarı boyu `half` olan elemanın boyca ağırlıklı ortalama dış çapı.
+    pub fn effective_diameter(&self, half: f64) -> f64 {
+        let p = self.pieces(half.max(1e-6));
+        let total: f64 = p.iter().map(|(a, b, _)| b - a).sum();
+        if total <= 0.0 {
+            return self.tip.diameter;
+        }
+        p.iter().map(|(a, b, t)| (b - a) * t.diameter).sum::<f64>() / total
+    }
     /// Elemanın yarı boyu `half` için parçalar: (iç uzaklık, dış uzaklık, boru).
     pub fn pieces(&self, half: f64) -> Vec<(f64, f64, &Tube)> {
         let mut out = Vec::new();
@@ -109,7 +118,23 @@ impl YagiDesign {
             let len = (0.445 - 0.006 * d as f64).max(0.40);
             elements.push(YagiElement { name: crate::tf!("Director {}", "Yönlendirici {}", d + 1), x: x * lambda, length: len * lambda });
         }
+        // Katsayılar Ø ≈ 0.0048 λ için; kalın (ya da ince) borularda elemanlar
+        // rezonans boyu oranında kısaltılır (uzatılır).
+        let k = thickness_factor(profile.effective_diameter(0.235 * lambda) / lambda);
+        for e in &mut elements {
+            e.length *= k;
+        }
         Self { name: crate::tf!("{n}-element Yagi", "{n} elemanlı Yagi"), frequency, elements, driven: 1, profile, height: lambda, ground: Ground::FreeSpace, boom: Boom::default(), loads: Vec::new(), driven_loop: None }
+    }
+
+    /// Frekans `old` → `new` değişip boru çapları aynı kaldığında, eleman
+    /// boylarını kalınlık farkına göre düzeltir (geometri ölçeklemesinden sonra).
+    pub fn rethickness(&mut self, old: f64, new: f64) {
+        let d = |f: f64| self.profile.effective_diameter(0.235 * C0 / f) / (C0 / f);
+        let k = thickness_factor(d(new)) / thickness_factor(d(old));
+        for e in &mut self.elements {
+            e.length *= k;
+        }
     }
 
     /// `n` elemanlı LFA Yagi başlangıç tasarımı (G0KSC tarzı halka beslemeli).
@@ -121,7 +146,7 @@ impl YagiDesign {
         d.name = crate::tf!("{n}-element LFA Yagi", "{n} elemanlı LFA Yagi");
         let p = lfa_params(d.elements.len());
         d.elements[1].x = p.0 * lambda;
-        d.elements[1].length = p.1 * lambda;
+        d.elements[1].length = p.1 * lambda * thickness_factor(d.profile.effective_diameter(0.2 * lambda) / lambda);
         d.elements[1].name = crate::i18n::t("Driven loop", "Sürülen halka").into();
         d.driven_loop = Some(p.2 * lambda);
         let shift = p.3 * lambda - d.elements.get(2).map(|e| e.x).unwrap_or(0.0);
@@ -460,4 +485,36 @@ fn lfa_params(n: usize) -> (f64, f64, f64, f64) {
         7 | 8 => (0.08, 0.42, 0.06, 0.22),
         _ => (0.10, 0.42, 0.06, 0.30),
     }
+}
+
+// ------------------------------------------------------------------ kalınlık
+
+/// Şablon katsayılarının ayarlandığı referans kalınlık (çap/λ): 2 m'de Ø10 mm.
+pub const REF_DIAMETER_WL: f64 = 0.0048;
+
+/// İnce tel modelinin güvenilir kabul edildiği en büyük çap/λ.
+pub const MAX_DIAMETER_WL: f64 = 0.02;
+
+/// Yalıtılmış (kayıpsız) dipolün bu çözücüdeki rezonans boyu (λ), çap/λ'ya göre.
+/// Çap/λ, ince tel modelinin sınırı olan [`MAX_DIAMETER_WL`] ile kırpılır.
+pub fn dipole_resonance_wl(d_wl: f64) -> f64 {
+    let d_wl = d_wl.clamp(1e-5, MAX_DIAMETER_WL);
+    let f = 300e6;
+    let lambda = C0 / f;
+    let t = Tube { diameter: d_wl * lambda, wall: None, material: Material::perfect() };
+    let x = |k: f64| crate::solver::solve(&crate::templates::dipole(f, k, &t), f).map(|s| s.impedance().im).unwrap_or(0.0);
+    let (mut a, mut b) = (0.40, 0.50);
+    for _ in 0..26 {
+        let m = 0.5 * (a + b);
+        if x(m) > 0.0 { b = m } else { a = m }
+    }
+    0.5 * (a + b)
+}
+
+/// Kalınlık düzeltme katsayısı: rezonans boyunun referans kalınlıktakine oranı
+/// (kalın elemanda < 1, ince elemanda > 1).
+pub fn thickness_factor(d_wl: f64) -> f64 {
+    static REF: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    let r = *REF.get_or_init(|| dipole_resonance_wl(REF_DIAMETER_WL));
+    dipole_resonance_wl(d_wl) / r
 }

@@ -110,3 +110,48 @@ fn yagi_tips_are_not_reported_as_gaps() {
     let l = YagiDesign::lfa(f, 7, Profile::uniform(tube10())).build();
     assert!(templates::open_end_gaps(&l, 0.25 * C0 / f).is_empty());
 }
+
+#[test]
+fn thickness_factor_shortens_thick_elements() {
+    use antan_core::yagi::{REF_DIAMETER_WL, thickness_factor};
+    assert!((thickness_factor(REF_DIAMETER_WL) - 1.0).abs() < 1e-9);
+    let thin = thickness_factor(0.001);
+    let thick = thickness_factor(0.0144);
+    assert!(thin > 1.0 && thick < 1.0, "{thin} {thick}");
+    assert!(thickness_factor(0.015) < thickness_factor(0.010));
+}
+
+#[test]
+fn uhf_template_starts_close_to_match() {
+    // 70 cm, Ø10 mm (0.014 λ): kalınlık düzeltmesiyle şablon SWR'si makul başlar.
+    let f = 432.2e6;
+    for n in [5usize, 9] {
+        let d = YagiDesign::standard(f, n, Profile::uniform(tube10()));
+        let z = solver::solve(&d.build(), f).unwrap().impedance();
+        let s = antan_core::matching::swr(z, 50.0);
+        println!("70 cm {n} el: Z = {z:.1}, SWR {s:.2}");
+        assert!(s < 1.8, "{n} el: SWR {s}");
+    }
+}
+
+#[test]
+fn thin_wire_limits_are_reported() {
+    use antan_core::geometry::ThinWireIssue;
+    // 23 cm'de Ø10 mm: 0.043 λ → uyarı; 2 m'de uyarı yok.
+    let thick = YagiDesign::standard(1296.2e6, 5, Profile::uniform(tube10())).build();
+    assert!(thick.thin_wire_issues().iter().all(|i| matches!(i, ThinWireIssue::TooThick { .. })));
+    assert_eq!(thick.thin_wire_issues().len(), 5);
+    let ok = YagiDesign::standard(144.3e6, 5, Profile::uniform(tube10())).build();
+    assert!(ok.thin_wire_issues().is_empty());
+    // Elle çok fazla parça: kısa parça uyarısı.
+    let mut a = templates::dipole(1296.2e6, 0.48, &Tube::aluminum(0.003, None));
+    a.wires[0].segments = 60;
+    assert!(matches!(a.thin_wire_issues()[0], ThinWireIssue::ShortSegments { .. }));
+    // Otomatik bölmede parça boyu yarıçapın 2 katından kısa olmaz.
+    a.wires[0].segments = 0;
+    assert!(a.thin_wire_issues().is_empty());
+    // Aşırı kalın: çözülmez.
+    let mut huge = templates::dipole(1296.2e6, 0.48, &Tube::aluminum(0.04, None));
+    huge.wires[0].segments = 0;
+    assert!(matches!(solver::solve(&huge, 1296.2e6), Err(SolveError::TooThick(0))));
+}

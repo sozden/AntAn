@@ -7,6 +7,7 @@ use antan_core::tf;
 use std::path::Path;
 
 use antan_core::Antenna;
+use antan_core::magloop::MagLoop;
 use antan_core::optimize::Goals;
 use antan_core::templates::{self, Tube};
 use antan_core::yagi::{Profile, YagiDesign};
@@ -112,6 +113,14 @@ pub struct Project {
     pub hairpin_l: f64,
     /// Geometrinin tasarlandığı (ya da en son ölçeklendiği) frekans (Hz); 0 = bilinmiyor.
     pub geom_freq: f64,
+    /// İstif düzeni (1×1 = istif yok).
+    pub stack: antan_core::stack::Stack,
+    /// Manyetik loop tasarımı; varsa tel modeli bundan üretilir.
+    pub magloop: Option<MagLoop>,
+    /// Kondansatörün en son ayarlandığı frekans (Hz).
+    pub loop_tuned_f: f64,
+    /// Verici gücü (W): loop'ta kondansatör gerilimi ve akım için.
+    pub tx_power: f64,
 }
 
 impl Default for Project {
@@ -154,10 +163,17 @@ impl Project {
             notes: String::new(),
             geom_freq: 0.0,
             hairpin_l: 0.0,
+            stack: Default::default(),
+            magloop: None,
+            loop_tuned_f: 0.0,
+            tx_power: 100.0,
         }
     }
+    /// Standart Yagi: boylar boru kalınlığına göre düzeltilmiş, sürülen eleman rezonansta (X = 0).
     pub fn yagi(frequency: f64, n: usize) -> Self {
-        Self::with_model(Model::Yagi(YagiDesign::standard(frequency, n, Profile::uniform(default_tube()))))
+        let d = YagiDesign::standard(frequency, n, Profile::uniform(default_tube()));
+        let d = d.tune_driven(|_| Some(0.0)).map(|(t, _)| t).unwrap_or(d);
+        Self::with_model(Model::Yagi(d))
     }
     /// Geometrinin tasarım frekansı: kayıtlıysa o, yoksa Yagi için en uzun
     /// elemandan (≈0.495 λ) tahmin; tel modelinde bilinmiyorsa `None`.
@@ -175,6 +191,10 @@ impl Project {
         let f = self.model.frequency();
         let Some(g) = self.design_frequency() else { return false };
         self.model.scale(g / f);
+        // Boru çapları ölçeklenmez: eleman boylarını kalınlık farkına göre düzelt.
+        if let Model::Yagi(d) = &mut self.model {
+            d.rethickness(g, f);
+        }
         self.geom_freq = f;
         true
     }
@@ -182,13 +202,87 @@ impl Project {
     pub fn change_frequency(&mut self, f: f64, scale: bool) {
         let old = self.model.frequency();
         self.model.set_frequency(f);
+        // Manyetik loop: ölçeklenirse halka boyutları değişir; her durumda kondansatör yeniden ayarlanır.
+        if let Some(m) = &mut self.magloop {
+            if scale {
+                m.diameter *= old / f;
+                m.coupling_gap *= old / f;
+            }
+            self.retune_loop();
+            return;
+        }
         if scale {
             self.model.scale(old / f);
+            if let Model::Yagi(d) = &mut self.model {
+                d.rethickness(old, f);
+            }
             if self.geom_freq > 0.0 {
                 self.geom_freq *= f / old;
             }
         }
     }
+    /// Manyetik loop: çevresi ≈ 0.1 λ (0.3–3 m çap), 22 mm bakır boru; kuplaj
+    /// halkası 50 Ω'a eşlenmiş, kondansatör frekansa ayarlı. Tarama dar (yüksek Q).
+    pub fn magloop(frequency: f64) -> Self {
+        let lambda = antan_core::C0 / frequency;
+        let mut m = MagLoop { diameter: (0.1 * lambda / std::f64::consts::PI).clamp(0.3, 3.0), ..Default::default() };
+        if let Some((mm, _)) = m.match_coupling(frequency, 50.0, Default::default()) {
+            m = mm;
+        }
+        let mut p = Self::with_model(Model::Wires(m.build(frequency)));
+        p.magloop = Some(m);
+        p.loop_tuned_f = frequency;
+        p.sweep_span_pct = 0.06;
+        p.sweep_points = 81;
+        p
+    }
+
+    /// Loop tasarımından tel modelini yeniden üretir; ad, zemin ve yükseklik korunur.
+    pub fn rebuild_loop(&mut self) {
+        let Some(m) = &mut self.magloop else { return };
+        let f = self.model.frequency();
+        if let Model::Wires(a) = &self.model {
+            let lo = a.wires.iter().flat_map(|w| [w.start[2], w.end[2]]).fold(f64::INFINITY, f64::min);
+            if lo.is_finite() {
+                m.bottom = lo;
+            }
+            let mut b = m.build(f);
+            b.name = a.name.clone();
+            b.ground = a.ground;
+            self.model = Model::Wires(b);
+        }
+    }
+
+    /// Kondansatörü şimdiki frekansa ayarlar (en düşük SWR). Başarısızsa `false`.
+    pub fn retune_loop(&mut self) -> bool {
+        let f = self.model.frequency();
+        let (z0, ground) = (self.z0, self.model.ground());
+        self.loop_tuned_f = f;
+        let ok = match &mut self.magloop {
+            Some(m) => match m.two_port(f, ground).ok().and_then(|tp| m.tune(&tp, z0)) {
+                Some(c) => {
+                    m.capacitance = c;
+                    true
+                }
+                None => false,
+            },
+            None => return false,
+        };
+        self.rebuild_loop();
+        ok
+    }
+
+    /// Kuplaj halkasının boyunu ve açıklığını en düşük SWR için ayarlar; SWR'yi döner.
+    pub fn match_loop(&mut self) -> Option<f64> {
+        let f = self.model.frequency();
+        let (z0, ground) = (self.z0, self.model.ground());
+        let (m, swr) = self.magloop.as_ref()?.match_coupling(f, z0, ground)?;
+        self.magloop = Some(m);
+        self.loop_tuned_f = f;
+        self.rebuild_loop();
+        Some(swr)
+    }
+
     pub fn lfa(frequency: f64, n: usize) -> Self {
         Self::with_model(Model::Yagi(YagiDesign::lfa(frequency, n, Profile::uniform(default_tube()))))
     }
@@ -230,7 +324,7 @@ mod tests {
 
     #[test]
     fn roundtrip_all_templates() {
-        let mut list = vec![Project::yagi(144.3e6, 5), Project::lfa(144.3e6, 7)];
+        let mut list = vec![Project::yagi(144.3e6, 5), Project::lfa(144.3e6, 7), Project::magloop(7.1e6)];
         for k in templates::Kind::ALL {
             list.push(Project::template(k, 50.1e6));
         }

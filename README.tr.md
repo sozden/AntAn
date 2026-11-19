@@ -94,8 +94,23 @@ ayarlanabilir (Görünüm → Yazı boyutu, Ctrl +/−).
   gamma çubuğu boyu ve seri kondansatörü.
 - **Hairpin'i modele takma:** SWR, empedans, tarama ve Smith abağı hat tarafından, hairpin dahil
   gösterilir (frekansa bağlı reaktans).
+- **Z₀'a eşle (tek tıkla):** eşleme düzeneği olmadan besleme hatla eşleşene kadar yalnız sürülen
+  elemanı ve ilk yönlendiriciyi (boy ve konum) ayarlar; kazanç ve diyagram korunur.
 - **Sürülen elemanı otomatik ayarla:** rezonansa (X = 0) veya hairpin için gereken kapasitif
   reaktansa, gerçek çözücüyle yinelenerek.
+
+**İstif**
+- Herhangi bir antenin iki, üç ya da dört kopyası üst üste, yan yana ya da 2 × 2 H çerçeve olarak
+  dizilir, ideal güç bölücüyle aynı fazda beslenir; karşılıklı etki çözümün parçasıdır.
+- Huzme genişliğinden DL6WU aralık önerisi, aralık taraması (kazanç ve en yüksek yan lob), her
+  antenin besleme empedansı ve bölücü girişindeki empedans.
+
+**Manyetik loop**
+- Ayar kondansatörlü ve kuplaj halkalı küçük verici halka (sekizgenden ≈ daireye). Frekans
+  değişince kondansatör kendiliğinden yeniden ayarlanır; kuplaj halkası tek tıkla 50 Ω'a eşlenir.
+- Bant boyunca gereken kondansatör, verici gücünde kondansatör gerilimi, halka Q'su ve bant
+  genişliği, kondansatör kaybı dahil verim gösterilir. Kondansatör yerinin iki kapılı modeli
+  sayesinde ayar ve eşleme anında yapılır.
 
 **İyileştirme (Yagi)**
 - Nelder-Mead; hedefler: kazanç, ön/arka (tavanlı), SWR; isteğe bağlı bant (±%) değerlendirmesi;
@@ -141,12 +156,16 @@ crates/
     mechanics.rs  kütle, kademeli kiriş sarkması, rüzgâr
     material.rs   malzemeler, boru iç empedansı (deri etkisi)
     nec.rs        NEC-2 dışa aktarımı
+    stack.rs      istif, DL6WU aralığı, aralık taraması
+    magloop.rs    manyetik loop, iki kapılı ayar, kuplaj halkası eşleme
     i18n.rs       İngilizce / Türkçe metinler
     tests/        doğrulama testleri
     examples/explore.rs  şablon boyutlarını taramak için keşif aracı
+    examples/validate.rs NEC-2 / MININEC karşılaştırma modelleri (bkz. docs/dogrulama.md)
   antan-app/    egui masaüstü arayüzü (koyu tema); build.rs exe simgesini gömer
 assets/         logo.svg (kaynak) ve üretilmiş simgeler
-tools/          make-icons.ps1 — simgeleri logo.svg'den yeniden üretir
+tools/          make-icons.ps1 — simgeleri logo.svg'den yeniden üretir;
+                validation/ — nec2c ve pymininec ile karşılaştırma
 docs/           kullanma kılavuzları (TR/EN) ve ekran görüntüleri
 ```
 
@@ -156,7 +175,10 @@ Eksenler: +X bum yönü (ileri), Y eleman ekseni, +Z yukarı. Birimler çekirdek
 
 İnce tel moment yöntemi, Harrington'ın karışık potansiyelli darbe tabanlı / nokta eşlemeli
 formülasyonu; indirgenmiş çekirdek, tekil kısım analitik. N telin buluştuğu noktada N−1 birleşim
-tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Testlerle doğrulananlar:
+tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Otomatik bölme dalga boyu başına 40 parçadır ama
+parça boyu tel yarıçapının iki katından kısa olmaz; 0.02 λ'dan kalın iletkenlerde geçerlilik uyarısı
+verilir, 0.1 λ'nın üstünde model çözülmez. Yagi şablonları eleman boylarını boru kalınlığına
+(çap/λ) göre düzeltir. Testlerle doğrulananlar:
 
 - İnce yarım dalga dipol ≈ 73 + j42 Ω, 2.15 dBi; parça sayısıyla yakınsama
 - Kayıpsız antenlerde enerji korunumu (kazanç = yönlülük, ±0.05 dB) — birleşimli antenler dahil
@@ -175,19 +197,26 @@ tabanı kurulur (Kirchhoff kendiliğinden sağlanır). Testlerle doğrulananlar:
 - İletken iç empedansının DC ve deri etkisi sınırları; L devresi/hairpin çözümlerinin geri kontrolü
 
 Şablon boyutlarının bir kısmı (quad, delta, GP, Moxon için ×1.012) bu çözücüyle taranarak
-ayarlanmıştır; NEC ile birkaç yüzdelik fark normaldir.
+ayarlanmıştır.
+
+**NEC-2 ve MININEC ile karşılaştırma:** 20 anten aynı geometriyle AntAn'da, `nec2c`'de (NEC-2) ve
+`pymininec`'te (MININEC, MMANA-GAL'ın çekirdeği) çalıştırıldı. Kazanç NEC-2 ile 0,06 dB (medyan; en
+çok 0,37 dB), MININEC ile 0,01 dB içinde uyuşuyor. Verim ve istif kazancı NEC-2 ile aynı. Borudan
+yapılmış antenlerde AntAn, MININEC gibi, rezonans frekansını NEC-2'den yaklaşık %1 yüksek buluyor.
+Tablolar ve yöntem: [docs/dogrulama.md](docs/dogrulama.md).
 
 Etkileşimsiz arayüz doğrulaması: `ANTAN_AUTOSHOT=<png yolu>` ile başlatılan program tarama
 bitince pencerenin görüntüsünü kaydedip kapanır. `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
 `ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded|lfa|loaded_dipole|dipole_ground`,
-`ANTAN_AUTOSHOT_WINDOW=suggest|height`, `ANTAN_AUTOSHOT_FREQ=<MHz>`, `ANTAN_AUTOSHOT_HAIRPIN=1`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3` ek seçeneklerdir.
+`ANTAN_AUTOSHOT_WINDOW=suggest|height|stack`, `ANTAN_AUTOSHOT_STACK=2x1|2x2|…`, şablon `magloop|magloop14`, `ANTAN_AUTOSHOT_FREQ=<MHz>`, `ANTAN_AUTOSHOT_HAIRPIN=1`, `ANTAN_AUTOSHOT_OPTIM=<adım>`, `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3` ek seçeneklerdir.
 
 ## Yol haritası
 
 - Tel modelleri için iyileştirici (ve LFA halka genişliği)
 - Gerçek zeminin akımlara etkisi (Sommerfeld/Norton) ve toprak kaybının empedansa yansıması
 - Gömülü radyal sistemi kaybı tahmini
-- Çoklu kaynak ve faz besleme, yığınlama (stacking)
+- Faz beslemesi (aynı fazlı istif dışında)
+- Rezonans frekansının daha hızlı yakınsaması (parça inceltme ya da daha yüksek dereceli taban)
 - MMANA `.maa` ve NEC içe aktarma; PDF/HTML rapor
 
 ## Kaynaklar ve atıflar

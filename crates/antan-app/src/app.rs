@@ -37,6 +37,9 @@ struct SolveKey {
     model: Model,
     span: f64,
     points: usize,
+    stack: antan_core::stack::Stack,
+    /// İstifte bölücü empedansı z0'a ve hairpin'e bağlı: (z0, hairpin L).
+    feed: Option<(f64, f64)>,
 }
 
 pub struct AntAnApp {
@@ -71,7 +74,16 @@ pub struct AntAnApp {
     /// Değer kartları alanının yüksekliği (önceki kareden), 3B görünüm boyu için.
     cards_h: f32,
     pub heightscan: crate::heightscan::HeightScan,
+    pub stackwin: crate::stackwin::StackWindow,
+    /// İstifte tek antenin modeli ve kazancı (istif yoksa `antenna` ile aynı).
+    single: Antenna,
+    single_gain: Option<f64>,
+    /// Manyetik loop: bant kenarlarında gereken kondansatör ((f, C) alt ve üst).
+    loop_range: Option<((f64, f64), (f64, f64))>,
     suggest: crate::suggest::Suggest,
+    matcher: crate::matchjob::MatchJob,
+    /// İnce tel modelinin sınırlarını aşan teller için uyarılar (son çözümden).
+    pub warnings: Vec<String>,
 
     shotter: shot::Shotter,
     window_rect: Option<egui::Rect>,
@@ -110,6 +122,10 @@ impl AntAnApp {
             }
             Some("yagi7") => tapered_demo(),
             Some("lfa") => Project::lfa(144.3e6, 7),
+            Some("yagi_70cm") => Project::yagi(432.2e6, 7),
+            Some("magloop") => Project::magloop(7.1e6),
+            Some("magloop14") => Project::magloop(14.175e6),
+            Some("yagi_23cm") => Project::yagi(1296.2e6, 9),
             Some("loaded_dipole") => Project::template(Kind::LoadedDipole, 7.1e6),
             Some("dipole_ground") => {
                 let mut p = Project::template(Kind::Dipole, 14.175e6);
@@ -122,6 +138,18 @@ impl AntAnApp {
             _ => Project::yagi(144.3e6, 5),
         };
         let mut project = project;
+        // İstif doğrulaması: ANTAN_AUTOSHOT_STACK=2x1 | 1x2 | 2x2 | 4x1 (önerilen aralıklarla).
+        if let Some((r, c)) = std::env::var("ANTAN_AUTOSHOT_STACK").ok().and_then(|v| {
+            let (a, b) = v.split_once('x')?;
+            Some((a.parse().ok()?, b.parse().ok()?))
+        }) {
+            let single = match &project.model {
+                Model::Yagi(d) => d.build(),
+                Model::Wires(a) => a.clone(),
+            };
+            let (v, h) = antan_core::stack::recommended_spacing(&single).unwrap_or((2.0, 2.0));
+            project.stack = antan_core::stack::Stack { rows: r, cols: c, v_spacing: v, h_spacing: h };
+        }
         if let Some(mhz) = std::env::var("ANTAN_AUTOSHOT_FREQ").ok().and_then(|v| v.parse::<f64>().ok()) {
             project.model.set_frequency(mhz * 1e6);
         }
@@ -153,7 +181,13 @@ impl AntAnApp {
             text_scale,
             cards_h: 90.0,
             heightscan: Default::default(),
+            stackwin: Default::default(),
+            single: Antenna::new("", 1.0, vec![], vec![]),
+            single_gain: None,
+            loop_range: None,
             suggest: Default::default(),
+            matcher: Default::default(),
+            warnings: Vec::new(),
             shotter: shot::Shotter::default(),
             window_rect: None,
             autoshot: std::env::var("ANTAN_AUTOSHOT").ok().map(PathBuf::from),
@@ -212,16 +246,50 @@ impl AntAnApp {
     }
 
     fn recompute_if_needed(&mut self, ctx: &egui::Context) {
-        let key = SolveKey { model: self.project.model.clone(), span: self.project.sweep_span_pct, points: self.project.sweep_points };
+        let stack = self.project.stack;
+        let key = SolveKey {
+            model: self.project.model.clone(),
+            span: self.project.sweep_span_pct,
+            points: self.project.sweep_points,
+            stack,
+            feed: (!stack.is_single()).then_some((self.project.z0, self.project.hairpin_l)),
+        };
         if self.solved.as_ref() == Some(&key) {
             return;
         }
         let t0 = Instant::now();
-        (self.antenna, self.wire_map) = match &self.project.model {
+        (self.single, self.wire_map) = match &self.project.model {
             Model::Yagi(d) => d.build_with_map(),
             Model::Wires(a) => (a.clone(), (0..a.wires.len()).map(|i| i..i + 1).collect()),
         };
+        self.antenna = antan_core::stack::apply(&self.single, &stack);
+        // Loop: bandın iki ucunda gereken kondansatör (ayar aralığı).
+        self.loop_range = self.project.magloop.as_ref().and_then(|m| {
+            let b = antan_core::bands::band_of(self.single.frequency)?;
+            let g = self.single.ground;
+            let c = |f: f64| m.two_port(f, g).ok().and_then(|tp| m.tune(&tp, self.project.z0)).map(|c| (f, c));
+            Some((c(b.lo)?, c(b.hi)?))
+        });
+        // İstifte tek antenin kazancı (karşılaştırma için); yalnız model değiştiyse.
+        self.single_gain = if stack.is_single() {
+            None
+        } else if self.solved.as_ref().map(|k| k.model == key.model && !k.stack.is_single()).unwrap_or(false) {
+            self.single_gain
+        } else {
+            solver::solve(&self.single, self.single.frequency).ok().map(|s| Pattern::compute(&s, 3.0).summary(&s).max_gain_dbi)
+        };
         let f = self.antenna.frequency;
+        let issues = self.antenna.thin_wire_issues();
+        self.warnings = match issues.first() {
+            None => Vec::new(),
+            Some(first) => {
+                let mut w = vec![first.message(&self.antenna)];
+                if issues.len() > 1 {
+                    w.push(tf!("(the same applies to {} more wires)", "(aynısı {} tel için daha geçerli)", issues.len() - 1));
+                }
+                w
+            }
+        };
         let sol = solver::solve(&self.antenna, f);
         match &sol {
             Ok(s) => {
@@ -229,7 +297,7 @@ impl AntAnApp {
                 self.summary = Some(pat.summary(s));
                 self.pattern = Some(pat);
                 let span = f * self.project.sweep_span_pct / 100.0;
-                self.sweep_job.start(ctx, self.antenna.clone(), f - span, f + span, self.project.sweep_points);
+                self.sweep_job.start(ctx, self.antenna.clone(), f - span, f + span, self.project.sweep_points, self.project.z0, self.project.hairpin_l);
                 self.status = tl("Solved", "Çözüldü").into();
             }
             Err(e) => {
@@ -274,8 +342,25 @@ impl AntAnApp {
         crate::project::with_hairpin(z, f, self.project.hairpin_l)
     }
 
-    /// Hairpin dahil tarama sonucu.
+    fn stacked(&self) -> bool {
+        self.antenna.sources.len() > 1
+    }
+
+    /// Hattın gördüğü empedans: tek antende hairpin dahil besleme empedansı,
+    /// istifte güç bölücü girişindeki empedans.
+    fn line_z(&self, s: &Solution) -> antan_core::Complex64 {
+        if self.stacked() {
+            crate::compute::line_impedance(s, self.project.z0, self.project.hairpin_l)
+        } else {
+            self.fed(s.impedance(), s.frequency)
+        }
+    }
+
+    /// Hairpin dahil tarama sonucu (istifte tarama zaten bölücü girişindedir).
     fn fed_sweep(&self) -> Option<Vec<SweepPoint>> {
+        if self.stacked() {
+            return self.sweep.clone();
+        }
         Some(self.sweep.as_ref()?.iter().map(|p| SweepPoint { frequency: p.frequency, impedance: self.fed(p.impedance, p.frequency) }).collect())
     }
 
@@ -392,6 +477,12 @@ impl AntAnApp {
                 ui.close();
             }
         }
+        if ui.button(tl("Magnetic loop (small transmitting loop)", "Manyetik loop (küçük verici halka)")).clicked() {
+            // Loop HF içindir; VHF/UHF'de 7.1 MHz ile başla.
+            let ff = if f > 60e6 { 7.1e6 } else { f };
+            self.replace_project(Project::magloop(ff));
+            ui.close();
+        }
     }
 
     fn menu(&mut self, ui: &mut egui::Ui) {
@@ -492,6 +583,10 @@ impl AntAnApp {
             if ui.button(tl("💡 Suggest", "💡 Öner")).on_hover_text(tl("Suggest and compare antennas for a frequency", "Bir frekans için anten öner ve karşılaştır")).clicked() {
                 self.suggest.open = true;
             }
+            let stack_label = if self.project.stack.is_single() { tl("☰ Stack", "☰ İstif").to_string() } else { tf!("☰ Stack ({})", "☰ İstif ({})", self.project.stack.count()) };
+            if ui.button(stack_label).on_hover_text(tl("Stack two or four copies of this antenna and find the best spacing", "Bu antenden iki ya da dört tanesini istifle, en uygun aralığı bul")).clicked() {
+                self.stackwin.open = true;
+            }
             if ui.button(tl("📂 Open", "📂 Aç")).clicked() {
                 self.open_dialog();
             }
@@ -536,10 +631,19 @@ impl AntAnApp {
             let (r, _) = ui.allocate_exact_size(Vec2::splat(12.0), egui::Sense::hover());
             ui.painter().circle_filled(r.center(), 4.5, if ok { theme::GOOD } else { theme::BAD });
             ui.label(RichText::new(&self.status).small());
+            if !self.warnings.is_empty() {
+                ui.separator();
+                ui.label(RichText::new(tl("⚠ thin-wire limit", "⚠ ince tel sınırı")).small().color(theme::WARM)).on_hover_text(self.warnings.join("
+"));
+            }
             if let Some(s) = self.sol() {
-                let z = self.fed(s.impedance(), self.antenna.frequency);
+                let z = self.line_z(s);
                 let swr = matching::swr(z, self.project.z0);
                 ui.separator();
+                if self.stacked() {
+                    ui.label(RichText::new(tf!("stack of {}", "{} antenli istif", self.antenna.sources.len())).color(theme::ACCENT));
+                    ui.separator();
+                }
                 ui.label(format!("Z = {}", fmt_z(z)));
                 ui.separator();
                 ui.label(RichText::new(format!("SWR {swr:.2}")).color(theme::swr_color(swr)));
@@ -634,11 +738,45 @@ impl AntAnApp {
     fn summary_cards(&self) -> Vec<Card> {
         let mut cards = Vec::new();
         let (Some(sol), Some(s)) = (self.sol(), &self.summary) else { return cards };
-        let z = self.fed(sol.impedance(), self.antenna.frequency);
+        let z = self.line_z(sol);
         let swr = matching::swr(z, self.project.z0);
         let lambda = C0 / self.antenna.frequency;
-        Self::kpi(&mut cards, tl("Gain", "Kazanç"), format!("{:.2} dBi", s.max_gain_dbi), tf!("{:.2} dBd · directivity {:.2} dBi", "{:.2} dBd · yönlülük {:.2} dBi", s.max_gain_dbi - 2.15, s.directivity_dbi), Color32::WHITE);
-        Self::kpi(&mut cards, tl("Front / back", "Ön / arka"), format!("{:.1} dB", s.front_to_back_db), String::new(), theme::ACCENT);
+        let gain_sub = match self.single_gain {
+            Some(g) if self.stacked() => tf!("+{:.2} dB over one antenna · {:.2} dBd", "tek antene göre +{:.2} dB · {:.2} dBd", s.max_gain_dbi - g, s.max_gain_dbi - 2.15),
+            _ => tf!("{:.2} dBd · directivity {:.2} dBi", "{:.2} dBd · yönlülük {:.2} dBi", s.max_gain_dbi - 2.15, s.directivity_dbi),
+        };
+        Self::kpi(&mut cards, tl("Gain", "Kazanç"), format!("{:.2} dBi", s.max_gain_dbi), gain_sub, Color32::WHITE);
+        if self.stacked() {
+            let st = self.project.stack;
+            let mut sp = Vec::new();
+            if st.rows > 1 {
+                sp.push(tf!("↕ {:.2} λ", "↕ {:.2} λ", st.v_spacing / lambda));
+            }
+            if st.cols > 1 {
+                sp.push(tf!("↔ {:.2} λ", "↔ {:.2} λ", st.h_spacing / lambda));
+            }
+            let feeds: Vec<String> = sol.feeds.iter().map(|f| format!("{:.0}{:+.0}j", f.impedance.re, f.impedance.im)).collect();
+            Self::kpi(&mut cards, &tf!("Stack {} × {}", "İstif {} × {}", st.rows, st.cols), sp.join("  "), tf!("each feed: {}", "beslemeler: {}", feeds.join(" · ")), theme::ACCENT);
+        }
+        if self.project.magloop.is_some()
+            && let Some(r) = antan_core::magloop::report(sol, self.project.tx_power)
+        {
+            let range = match self.loop_range {
+                Some(((f0, c0), (f1, c1))) => tf!("band {:.3}–{:.3} MHz: {:.1}–{:.1} pF", "bant {:.3}–{:.3} MHz: {:.1}–{:.1} pF", f0 / 1e6, f1 / 1e6, c1 * 1e12, c0 * 1e12),
+                None => String::new(),
+            };
+            Self::kpi(&mut cards, tl("Tuning capacitor", "Ayar kondansatörü"), format!("{:.1} pF", r.capacitance * 1e12), range, theme::ACCENT);
+            Self::kpi(
+                &mut cards,
+                &tf!("Capacitor voltage at {:.0} W", "{:.0} W'ta kondansatör gerilimi", self.project.tx_power),
+                format!("{:.1} kV", r.cap_voltage / 1e3),
+                tf!("peak · loop current {:.1} A peak · capacitor loss {:.1}%", "tepe · halka akımı {:.1} A tepe · kondansatör kaybı %{:.1}", r.loop_current, r.cap_loss * 100.0),
+                theme::WARM,
+            );
+            Self::kpi(&mut cards, tl("Loop Q", "Halka Q'su"), format!("{:.0}", r.q), tf!("−3 dB bandwidth ≈ {:.1} kHz (matched)", "−3 dB bant ≈ {:.1} kHz (eşleşmiş)", r.bandwidth_3db / 1e3), Color32::WHITE);
+        } else {
+            Self::kpi(&mut cards, tl("Front / back", "Ön / arka"), format!("{:.1} dB", s.front_to_back_db), String::new(), theme::ACCENT);
+        }
         let ground = self.antenna.ground;
         if !ground.is_free() {
             let (lo, hi) = self.antenna.bounds();
@@ -650,8 +788,9 @@ impl AntAnApp {
                 theme::WARM,
             );
         }
-        Self::kpi(&mut cards, if self.project.hairpin_l > 0.0 { tl("Feed impedance (with hairpin)", "Besleme empedansı (hairpin dahil)") } else { tl("Feed impedance", "Besleme empedansı") }, fmt_z(z), format!("|Γ| = {:.3} · RL {:.1} dB", matching::reflection(z, self.project.z0).norm(), matching::return_loss_db(z, self.project.z0)), Color32::WHITE);
+        Self::kpi(&mut cards, if self.stacked() { tl("Impedance at the power divider", "Güç bölücü girişinde empedans") } else if self.project.hairpin_l > 0.0 { tl("Feed impedance (with hairpin)", "Besleme empedansı (hairpin dahil)") } else { tl("Feed impedance", "Besleme empedansı") },fmt_z(z), format!("|Γ| = {:.3} · RL {:.1} dB", matching::reflection(z, self.project.z0).norm(), matching::return_loss_db(z, self.project.z0)), Color32::WHITE);
         Self::kpi(&mut cards, &format!("SWR ({:.0} Ω)", self.project.z0), format!("{swr:.2}"), match self.band() {
+            Some((lo, hi)) if hi - lo < 50e3 => tf!("2:1 band: {:.4}–{:.4} MHz ({:.1} kHz)", "2:1 bant: {:.4}–{:.4} MHz ({:.1} kHz)", lo / 1e6, hi / 1e6, (hi - lo) / 1e3),
             Some((lo, hi)) => tf!("2:1 band: {:.2}–{:.2} MHz ({:.0} kHz)", "2:1 bant: {:.2}–{:.2} MHz ({:.0} kHz)", lo / 1e6, hi / 1e6, (hi - lo) / 1e3),
             None if self.sweep_job.pending() => tl("computing bandwidth…", "bant hesaplanıyor…").into(),
             None => tl("no 2:1 band", "2:1 bant yok").into(),
@@ -751,7 +890,7 @@ impl AntAnApp {
     fn sweep_tab(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.label(tl("Sweep: ±", "Tarama: ±"));
-            ui.add(egui::DragValue::new(&mut self.project.sweep_span_pct).range(0.2..=40.0).speed(0.1).suffix(" %"));
+            ui.add(egui::DragValue::new(&mut self.project.sweep_span_pct).range(0.01..=40.0).speed(0.01).max_decimals(3).suffix(" %"));
             ui.label(tl("points", "nokta"));
             ui.add(egui::DragValue::new(&mut self.project.sweep_points).range(5..=401));
             if self.sweep_job.pending() {
@@ -929,6 +1068,7 @@ impl AntAnApp {
             });
         }
 
+        let mut start_match: Option<antan_core::yagi::YagiDesign> = None;
         if let Model::Yagi(d) = &self.project.model {
             ui.add_space(8.0);
             egui::Frame::new().fill(Color32::from_rgb(34, 40, 51)).corner_radius(6.0).inner_margin(10.0).show(ui, |ui| {
@@ -960,10 +1100,26 @@ impl AntAnApp {
                         }
                     }
                 });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.label(RichText::new(tf!("Match to Z₀ = {:.0} Ω", "Z₀ = {:.0} Ω'a eşle", z0)).strong().color(theme::ACCENT));
+                ui.label(RichText::new(tl("Adjusts only the driven element and the first director (lengths and boom positions) until the feed impedance matches the line, without a matching device. The reflector and the other directors stay where they are, so gain and pattern barely change.", "Besleme empedansı hatla eşleşene kadar yalnız sürülen elemanı ve ilk yönlendiriciyi (boy ve bum konumu) ayarlar; eşleme düzeneği gerekmez. Yansıtıcı ve diğer yönlendiriciler yerinde kalır, kazanç ve diyagram pek değişmez.")).small().color(theme::TEXT_DIM));
+                ui.horizontal_wrapped(|ui| {
+                    if self.matcher.busy() {
+                        ui.spinner();
+                        ui.label(tf!("matching… step {}", "eşleniyor… adım {}", self.matcher.iteration()));
+                    } else if ui.add(egui::Button::new(RichText::new(tf!("🎯 Match to {:.0} Ω", "🎯 {:.0} Ω'a eşle", z0)).strong()).fill(theme::ACCENT_DIM)).clicked() {
+                        start_match = Some(d.clone());
+                    }
+                });
                 if let Some(m) = &self.tune_msg {
                     ui.label(RichText::new(m).color(theme::GOOD));
                 }
             });
+        }
+        if let Some(d) = start_match {
+            let ctx = ui.ctx().clone();
+            self.matcher.start(&ctx, d, z0);
         }
         if let Some(p) = apply {
             self.replace_project(p);
@@ -1024,6 +1180,25 @@ impl eframe::App for AntAnApp {
             }
         }
         self.shortcuts(&ctx);
+        if let Some((d, before, after)) = self.matcher.poll() {
+            let mut p = self.project.clone();
+            if let Model::Yagi(_) = &p.model {
+                p.model = Model::Yagi(d);
+                self.replace_project(p);
+                self.tune_msg = Some(tf!(
+                    "Matched: SWR {:.2} → {:.2}, gain {:.2} → {:.2} dBi, F/B {:.1} → {:.1} dB (Ctrl+Z to undo)",
+                    "Eşlendi: SWR {:.2} → {:.2}, kazanç {:.2} → {:.2} dBi, Ö/A {:.1} → {:.1} dB (geri almak için Ctrl+Z)",
+                    before.swr, after.swr, before.gain_dbi, after.gain_dbi, before.fb_db, after.fb_db
+                ));
+                self.status = self.tune_msg.clone().unwrap_or_default();
+            }
+        }
+        // Manyetik loop: frekans değiştiyse kondansatörü yeniden ayarla (gerçek loop gibi).
+        if self.project.magloop.is_some() && (self.project.model.frequency() - self.project.loop_tuned_f).abs() > 0.5 && !ctx.input(|i| i.pointer.any_down()) {
+            if !self.project.retune_loop() {
+                self.status = tl("The loop cannot be tuned with a capacitor at this frequency", "Halka bu frekansta kondansatörle ayarlanamaz").into();
+            }
+        }
         self.recompute_if_needed(&ctx);
         if let Some(r) = self.sweep_job.poll() {
             match r {
@@ -1059,6 +1234,12 @@ impl eframe::App for AntAnApp {
             {
                 self.project.hairpin_l = h.inductance;
             }
+            if self.autoshot_frame == 2
+                && std::env::var_os("ANTAN_AUTOSHOT_MATCH").is_some()
+                && let Model::Yagi(d) = &self.project.model
+            {
+                self.matcher.start(&ctx, d.clone(), self.project.z0);
+            }
             if self.autoshot_frame == 2 {
                 match std::env::var("ANTAN_AUTOSHOT_WINDOW").ok().as_deref() {
                     Some("suggest") => {
@@ -1070,10 +1251,14 @@ impl eframe::App for AntAnApp {
                         self.heightscan.open = true;
                         self.heightscan.start(&ctx, self.antenna.clone());
                     }
+                    Some("stack") => {
+                        self.stackwin.open = true;
+                        self.stackwin.start(&ctx, self.single.clone(), self.project.stack, self.project.z0);
+                    }
                     _ => {}
                 }
             }
-            if self.autoshot_frame > 8 && !self.sweep_job.pending() && !self.optim.busy() && !self.suggest.busy() && !self.heightscan.busy() && self.autoshot_frame < 1000 {
+            if self.autoshot_frame > 8 && !self.sweep_job.pending() && !self.optim.busy() && !self.suggest.busy() && !self.heightscan.busy() && !self.stackwin.busy() && !self.matcher.busy() && self.autoshot_frame < 1000 {
                 if let Some(rect) = self.window_rect {
                     self.shotter.request(&ctx, rect, path);
                     self.autoshot_frame = 1000;
@@ -1139,6 +1324,10 @@ impl eframe::App for AntAnApp {
         let lowest = self.antenna.wires.iter().flat_map(|w| [w.start[2], w.end[2]]).fold(f64::INFINITY, f64::min);
         if let Some(h) = self.heightscan.show(&ctx, &self.antenna, self.project.z0, lowest) {
             self.set_height(h);
+        }
+        let single = self.single.clone();
+        if let Some(st) = self.stackwin.show(&ctx, &single, self.project.stack, self.single_gain.or(self.summary.filter(|_| !self.stacked()).map(|s| s.max_gain_dbi)), self.project.z0) {
+            self.project.stack = st;
         }
         if let Some(p) = self.suggest.show(&ctx, self.project.model.frequency()) {
             self.status = tf!("Opened suggestion: {}", "Öneri açıldı: {}", p.model.name());

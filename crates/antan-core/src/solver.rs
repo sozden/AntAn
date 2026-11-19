@@ -47,7 +47,13 @@ pub enum SolveError {
     Singular,
     /// Model elektriksel olarak çok büyük (bilinmeyen sayısı sınırı aşıyor).
     TooLarge(usize),
+    /// Tel dalga boyuna göre ince tel modeliyle çözülemeyecek kadar kalın.
+    TooThick(usize),
 }
+
+/// Bu çap/λ'nın üstünde çözülmez (ince tel modeli anlamsız sonuç verir).
+/// 0.02 … 0.1 arası çözülür ama uyarı gösterilir (`Antenna::thin_wire_issues`).
+pub const MAX_SOLVABLE_DIAMETER_WL: f64 = 0.1;
 
 /// Bilinmeyen sayısı üst sınırı. Bellek (n² karmaşık sayı) ve süre (n³) bunun
 /// üstünde masaüstünde makul olmaktan çıkar; tarama da bunu paralel çalıştırır.
@@ -63,6 +69,12 @@ impl std::fmt::Display for SolveError {
             Self::BelowGround(i) => f.write_str(&crate::tf!("Wire {} goes below ground (z = 0); increase the height", "{}. tel zeminin (z = 0) altına iniyor; yüksekliği artırın", i + 1)),
             Self::BadLoad(i) => f.write_str(&crate::tf!("Load {} is not at a valid point (free end, multi-wire junction or nonexistent wire)", "{}. yük geçerli bir noktada değil (serbest uç, çoklu birleşim ya da olmayan tel)", i + 1)),
             Self::Singular => f.write_str(crate::i18n::t("Impedance matrix is singular; the geometry could not be solved", "Empedans matrisi tekil; geometri çözülemedi")),
+            Self::TooThick(i) => f.write_str(&crate::tf!(
+                "Wire {} is far too thick for this frequency (diameter > {:.1} λ); the thin-wire model cannot solve it. Use a thinner tube or a lower frequency.",
+                "{}. tel bu frekans için çok kalın (çap > {:.1} λ); ince tel modeli bunu çözemez. Daha ince boru ya da daha düşük frekans kullanın.",
+                i + 1,
+                MAX_SOLVABLE_DIAMETER_WL
+            )),
             Self::TooLarge(n) => f.write_str(&crate::tf!(
                 "The model is electrically too large at this frequency (~{} segments, limit {}). Lower the frequency or scale the antenna to it.",
                 "Model bu frekansta elektriksel olarak çok büyük (~{} parça, sınır {}). Frekansı düşürün ya da anteni ona göre ölçekleyin.",
@@ -286,9 +298,13 @@ pub fn mesh(antenna: &Antenna) -> Result<Mesh, SolveError> {
         return Err(SolveError::Singular);
     }
     // Bellek ayırmadan önce boyut denetimi (çok yüksek frekans girilince donmasın).
-    let total: usize = antenna.wires.iter().map(|w| if w.length().is_finite() { w.segment_count(lambda) } else { 0 }).sum();
+    let total: usize = antenna.wires.iter().map(|w| if w.length().is_finite() { w.electrical_segments(lambda) } else { 0 }).sum();
     if total > MAX_UNKNOWNS {
         return Err(SolveError::TooLarge(total));
+    }
+    // İnce tel yaklaşımının tamamen anlamsızlaştığı kalınlık: çözme.
+    if let Some(i) = antenna.wires.iter().position(|w| w.diameter / lambda > MAX_SOLVABLE_DIAMETER_WL) {
+        return Err(SolveError::TooThick(i));
     }
     let tol = junction_tolerance(antenna, lambda);
     let grounded = !antenna.ground.is_free();

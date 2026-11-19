@@ -98,8 +98,24 @@ available in **English and Turkish** (Language / Dil menu), with an adjustable t
   length and series capacitor.
 - **Install the hairpin on the model:** SWR, impedance, sweep and Smith chart are then shown on the
   line side with the hairpin included (frequency-dependent reactance).
+- **Match to Z₀ (one click):** adjusts only the driven element and the first director (lengths and
+  positions) until the feed matches the line without a matching device; gain and pattern are kept.
 - **Auto-tune the driven element:** to resonance (X = 0) or to the capacitive reactance a hairpin
   needs, iterated with the full solver.
+
+**Stacking**
+- Two, three or four copies of any antenna stacked vertically, side by side or as a 2 × 2 H-frame,
+  fed in phase through an ideal power divider; mutual coupling is part of the solution.
+- DL6WU spacing suggestion from the beamwidth, spacing scan (gain and highest side lobe), each
+  antenna's feed impedance and the impedance at the divider input.
+
+**Magnetic loop**
+- Small transmitting loop (octagon to ≈ circle) with a tuning capacitor and a coupling loop. The
+  capacitor is retuned automatically when the frequency changes, and one click matches the coupling
+  loop to 50 Ω.
+- Shows the capacitor needed across the band, the capacitor voltage at the transmitter power, the
+  loop Q and bandwidth, and the efficiency including capacitor loss. A two-port model of the
+  capacitor gap makes tuning and matching instant.
 
 **Optimization (Yagi)**
 - Nelder-Mead; goals: gain, front-to-back (with a cap), SWR; optional band (±%) evaluation; options
@@ -146,12 +162,16 @@ crates/
     mechanics.rs  mass, stepped-beam sag, wind
     material.rs   materials, tube internal impedance (skin effect)
     nec.rs        NEC-2 export
+    stack.rs      stacking, DL6WU spacing, spacing scan
+    magloop.rs    magnetic loop, two-port tuning, coupling-loop matching
     i18n.rs       English / Turkish texts
     tests/        validation tests
     examples/explore.rs  exploration tool used to tune template dimensions
+    examples/validate.rs comparison models for NEC-2 / MININEC (see docs/validation.md)
   antan-app/    egui desktop UI (dark theme); build.rs embeds the exe icon
 assets/         logo.svg (source) and generated icons
-tools/          make-icons.ps1 — regenerates the icons from logo.svg
+tools/          make-icons.ps1 — regenerates the icons from logo.svg;
+                validation/ — comparison with nec2c and pymininec
 docs/           user guides (EN/TR) and screenshots
 ```
 
@@ -162,7 +182,10 @@ Source comments are in Turkish.
 
 Thin-wire method of moments, Harrington's mixed-potential pulse-basis / point-matching formulation;
 reduced kernel with the singular part integrated analytically. Where N wires meet, N−1 junction
-bases are created, so Kirchhoff's current law holds by construction. Verified by tests:
+bases are created, so Kirchhoff's current law holds by construction. Automatic segmentation uses
+40 segments per wavelength but never makes a segment shorter than twice the wire radius; conductors
+thicker than 0.02 λ trigger a validity warning and above 0.1 λ the model is not solved. Yagi
+templates correct element lengths for tube thickness (diameter/λ). Verified by tests:
 
 - Thin half-wave dipole ≈ 73 + j42 Ω, 2.15 dBi; convergence with segment count
 - Energy conservation in lossless antennas (gain = directivity, ±0.05 dB), including junctions
@@ -180,13 +203,18 @@ bases are created, so Kirchhoff's current law holds by construction. Verified by
 - Folded dipole ≈ equivalent-radius model; forward gain and high F/B for Moxon and quad
 - Conductor internal impedance at the DC and skin-effect limits; L network/hairpin solutions checked back
 
-Some template dimensions (quad, delta, GP, Moxon ×1.012) were tuned by sweeping with this solver;
-differences of a few percent from NEC are normal.
+Some template dimensions (quad, delta, GP, Moxon ×1.012) were tuned by sweeping with this solver.
+
+**Comparison with NEC-2 and MININEC:** 20 antennas were run with identical geometry in AntAn,
+`nec2c` (NEC-2) and `pymininec` (MININEC, the engine of MMANA-GAL). Gain agrees with NEC-2 within
+0.06 dB (median; largest 0.37 dB) and with MININEC within 0.01 dB. Efficiency and stacking gain agree
+with NEC-2. For antennas made of tubing AntAn finds the resonant frequency about 1 % higher than
+NEC-2, as MININEC does. Full tables and method: [docs/validation.md](docs/validation.md).
 
 Non-interactive UI check: started with `ANTAN_AUTOSHOT=<png path>`, the program saves a screenshot of
 the window when the sweep is finished and exits. Further options: `ANTAN_AUTOSHOT_TAB=cuts|sweep|matching|optim`,
 `ANTAN_AUTOSHOT_TEMPLATE=yagi7|moxon|quad|gp|vertical|yagi_ground|trap|loaded|lfa|loaded_dipole|dipole_ground`,
-`ANTAN_AUTOSHOT_WINDOW=suggest|height`, `ANTAN_AUTOSHOT_FREQ=<MHz>`, `ANTAN_AUTOSHOT_HAIRPIN=1`, `ANTAN_AUTOSHOT_OPTIM=<iterations>`,
+`ANTAN_AUTOSHOT_WINDOW=suggest|height|stack`, `ANTAN_AUTOSHOT_STACK=2x1|2x2|…`, template `magloop|magloop14`, `ANTAN_AUTOSHOT_FREQ=<MHz>`, `ANTAN_AUTOSHOT_HAIRPIN=1`, `ANTAN_AUTOSHOT_OPTIM=<iterations>`,
 `ANTAN_AUTOSHOT_SIZE=1560x1400`, `ANTAN_AUTOSHOT_OPEN_ALL=1`, `ANTAN_LANG=en|tr`, `ANTAN_SCALE=1.3`.
 
 ## Roadmap
@@ -194,7 +222,8 @@ the window when the sweep is finished and exits. Further options: `ANTAN_AUTOSHO
 - Optimizer for wire models (and for the LFA loop width)
 - Effect of real ground on the currents (Sommerfeld/Norton) and soil loss in the feed impedance
 - Loss estimate for buried radial systems
-- Multiple sources and phased feeding, stacking
+- Phased feeding (other than in-phase stacks)
+- Faster convergence of the resonant frequency (segment tapering or a higher-order basis)
 - MMANA `.maa` and NEC import; PDF/HTML report
 
 ## References and credits

@@ -59,15 +59,87 @@ impl Wire {
         std::f64::consts::PI * (a * a - inner * inner)
     }
     /// Çözücünün kullanacağı parça sayısı: en az 4, her zaman çift
-    /// (ortadan beslenebilmesi için ortada bir düğüm bulunur).
+    /// (ortadan beslenebilmesi için ortada bir düğüm bulunur). Otomatikte
+    /// dalga boyu başına 40 parça; ancak ince tel çekirdeği için parça boyu
+    /// yarıçapın [`MIN_SEGMENT_RADII`] katından kısa olmaz (kalın borularda daha az parça).
     pub fn segment_count(&self, wavelength: f64) -> usize {
         let n = if self.segments > 0 {
             self.segments
         } else {
-            (self.length() / (wavelength / 40.0)).ceil() as usize
+            let by_lambda = (self.length() / (wavelength / 40.0)).ceil() as usize;
+            let by_radius = (self.length() / (MIN_SEGMENT_RADII * self.radius())).floor() as usize;
+            // Kalın boruda kısa tel (ör. manyetik loop kenarı): 4 parça yarıçap sınırını
+            // bozacaksa 2 parçaya inilir (ortada yine bir düğüm kalır).
+            if by_radius < 4 {
+                return 2;
+            }
+            by_lambda.min(by_radius)
         };
         let n = n.max(4);
         n + n % 2
+    }
+    /// Elektriksel büyüklük ölçüsü: dalga boyu başına 40 parçayla parça sayısı
+    /// (yarıçap sınırı uygulanmadan; model büyüklüğü denetimi için).
+    pub fn electrical_segments(&self, wavelength: f64) -> usize {
+        if self.segments > 0 { self.segments } else { (self.length() / (wavelength / 40.0)).ceil() as usize }
+    }
+    /// Parça boyunun yarıçapa oranı (ince tel modeli için ≥ 2 olmalı).
+    pub fn segment_to_radius(&self, wavelength: f64) -> f64 {
+        self.length() / self.segment_count(wavelength) as f64 / self.radius()
+    }
+}
+
+/// İnce tel (azaltılmış çekirdek) modeli için en kısa parça boyu, yarıçap cinsinden.
+pub const MIN_SEGMENT_RADII: f64 = 2.0;
+
+/// İnce tel modelinin geçerliliğiyle ilgili uyarı.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ThinWireIssue {
+    /// Tel dalga boyuna göre çok kalın (çap/λ).
+    TooThick { wire: usize, d_wl: f64 },
+    /// Parça boyu yarıçapa göre çok kısa (oran).
+    ShortSegments { wire: usize, ratio: f64 },
+}
+
+impl ThinWireIssue {
+    pub fn message(&self, a: &Antenna) -> String {
+        let name = |w: usize| a.wires.get(w).map(|x| x.name.clone()).unwrap_or_default();
+        match *self {
+            ThinWireIssue::TooThick { wire, d_wl } => crate::tf!(
+                "“{}” is very thick for this frequency (Ø = {:.3} λ, limit {:.2} λ). The thin-wire model is not reliable here — results (especially SWR) may be wrong. Use a thinner tube or rod.",
+                "“{}” bu frekans için çok kalın (Ø = {:.3} λ, sınır {:.2} λ). İnce tel modeli burada güvenilir değil — sonuçlar (özellikle SWR) yanlış olabilir. Daha ince boru ya da çubuk kullanın.",
+                name(wire),
+                d_wl,
+                crate::yagi::MAX_DIAMETER_WL
+            ),
+            ThinWireIssue::ShortSegments { wire, ratio } => crate::tf!(
+                "“{}”: segments are only {:.1}× the wire radius (should be ≥ {:.0}×). Use fewer segments, a thinner wire or “auto”.",
+                "“{}”: parçalar tel yarıçapının yalnız {:.1} katı (en az {:.0} kat olmalı). Daha az parça, daha ince tel ya da “otomatik” seçin.",
+                name(wire),
+                ratio,
+                MIN_SEGMENT_RADII
+            ),
+        }
+    }
+}
+
+impl Antenna {
+    /// İnce tel modelinin güvenilirlik sınırlarını aşan teller (her tel için en fazla bir uyarı).
+    pub fn thin_wire_issues(&self) -> Vec<ThinWireIssue> {
+        let lambda = crate::C0 / self.frequency;
+        let mut out = Vec::new();
+        for (i, w) in self.wires.iter().enumerate() {
+            let d_wl = w.diameter / lambda;
+            if d_wl > crate::yagi::MAX_DIAMETER_WL {
+                out.push(ThinWireIssue::TooThick { wire: i, d_wl });
+            } else {
+                let r = w.segment_to_radius(lambda);
+                if r < MIN_SEGMENT_RADII {
+                    out.push(ThinWireIssue::ShortSegments { wire: i, ratio: r });
+                }
+            }
+        }
+        out
     }
 }
 

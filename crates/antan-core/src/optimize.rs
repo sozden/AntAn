@@ -71,8 +71,12 @@ pub fn evaluate(d: &YagiDesign, g: &Goals) -> Option<Score> {
 /// Değişken eşlemesi: tasarım ↔ vektör (λ cinsinden).
 struct Vars {
     lambda: f64,
+    /// Boyu değişen elemanlar.
+    sized: Vec<usize>,
     /// Konumu değişen elemanlar.
     movable: Vec<usize>,
+    /// Adım büyüklükleri (λ): boy, konum.
+    step: (f64, f64),
 }
 
 impl Vars {
@@ -85,27 +89,38 @@ impl Vars {
         } else {
             (1..n).collect()
         };
-        Self { lambda: C0 / d.frequency, movable }
+        Self { lambda: C0 / d.frequency, sized: (0..n).collect(), movable, step: (0.01, 0.02) }
+    }
+    /// Besleme eşlemesi için: yalnız sürülen eleman ile (varsa) ilk yönlendiricinin
+    /// boyu ve konumu. Yansıtıcı ve diğer yönlendiriciler yerinde kalır.
+    fn for_match(d: &YagiDesign) -> Self {
+        let mut idx = vec![d.driven];
+        // Sürülenin hemen önündeki eleman (ilk yönlendirici).
+        let dx = d.elements[d.driven].x;
+        if let Some((i, _)) = d.elements.iter().enumerate().filter(|(_, e)| e.x > dx).min_by(|a, b| a.1.x.total_cmp(&b.1.x)) {
+            idx.push(i);
+        }
+        Self { lambda: C0 / d.frequency, sized: idx.clone(), movable: idx, step: (0.004, 0.01) }
     }
     fn to_vec(&self, d: &YagiDesign) -> Vec<f64> {
-        let mut v: Vec<f64> = d.elements.iter().map(|e| e.length / self.lambda).collect();
+        let mut v: Vec<f64> = self.sized.iter().map(|&i| d.elements[i].length / self.lambda).collect();
         v.extend(self.movable.iter().map(|&i| d.elements[i].x / self.lambda));
         v
     }
     fn apply(&self, base: &YagiDesign, v: &[f64]) -> YagiDesign {
         let mut d = base.clone();
-        let n = d.elements.len();
-        for i in 0..n {
-            d.elements[i].length = v[i] * self.lambda;
+        let n = self.sized.len();
+        for (k, &i) in self.sized.iter().enumerate() {
+            d.elements[i].length = v[k] * self.lambda;
         }
         for (k, &i) in self.movable.iter().enumerate() {
             d.elements[i].x = v[n + k] * self.lambda;
         }
         d
     }
-    fn steps(&self, n: usize) -> Vec<f64> {
-        let mut s = vec![0.01; n];
-        s.extend(self.movable.iter().map(|_| 0.02));
+    fn steps(&self) -> Vec<f64> {
+        let mut s = vec![self.step.0; self.sized.len()];
+        s.extend(self.movable.iter().map(|_| self.step.1));
         s
     }
 }
@@ -131,8 +146,19 @@ fn penalty(d: &YagiDesign) -> f64 {
 }
 
 /// Nelder-Mead. `progress(iter, en iyi skor, en iyi tasarım)` false dönerse durur.
-pub fn optimize(start: &YagiDesign, goals: &Goals, max_iter: usize, mut progress: impl FnMut(usize, &Score, &YagiDesign) -> bool) -> (YagiDesign, Score) {
-    let vars = Vars::new(start, goals);
+pub fn optimize(start: &YagiDesign, goals: &Goals, max_iter: usize, progress: impl FnMut(usize, &Score, &YagiDesign) -> bool) -> (YagiDesign, Score) {
+    nelder_mead(start, goals, &Vars::new(start, goals), max_iter, progress)
+}
+
+/// Besleme empedansını Z₀'a eşler: yalnız sürülen eleman ile ilk yönlendiricinin
+/// boyu ve konumu değişir; SWR ağır basar, kazancın düşmesi ve Ö/A kaybı da
+/// cezalandırılır (diyagram korunur). Yansıtıcı ve diğer elemanlar yerinde kalır.
+pub fn match_feed(start: &YagiDesign, z0: f64, max_iter: usize, progress: impl FnMut(usize, &Score, &YagiDesign) -> bool) -> (YagiDesign, Score) {
+    let goals = Goals { w_gain: 1.0, w_fb: 0.1, w_swr: 30.0, fb_cap_db: 25.0, z0, half_band: 0.0, keep_boom: true, move_elements: true };
+    nelder_mead(start, &goals, &Vars::for_match(start), max_iter, progress)
+}
+
+fn nelder_mead(start: &YagiDesign, goals: &Goals, vars: &Vars, max_iter: usize, mut progress: impl FnMut(usize, &Score, &YagiDesign) -> bool) -> (YagiDesign, Score) {
     let x0 = vars.to_vec(start);
     let dim = x0.len();
     let f = |x: &[f64]| -> (f64, Score) {
@@ -147,7 +173,7 @@ pub fn optimize(start: &YagiDesign, goals: &Goals, max_iter: usize, mut progress
         }
     };
 
-    let steps = vars.steps(start.elements.len());
+    let steps = vars.steps();
     let mut simplex: Vec<(Vec<f64>, f64, Score)> = Vec::with_capacity(dim + 1);
     let (c0, s0) = f(&x0);
     simplex.push((x0.clone(), c0, s0));
@@ -224,5 +250,23 @@ mod tests {
         assert_eq!(best.elements[0].x, d.elements[0].x);
         // Bum boyu korunmalı.
         assert!((best.boom_length() - d.boom_length()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn match_feed_reaches_50_ohm_and_keeps_others() {
+        // 70 cm, kalın eleman: şablon SWR'si yüksek başlar.
+        let d = YagiDesign::standard(432.2e6, 7, Profile::uniform(Tube::aluminum(0.01, Some(0.001))));
+        let g = Goals::default();
+        let before = evaluate(&d, &g).unwrap();
+        let (m, s) = match_feed(&d, 50.0, 150, |_, _, _| true);
+        println!("önce {before:?}
+sonra {s:?}");
+        assert!(s.swr < 1.15, "{s:?}");
+        assert!(s.gain_dbi > before.gain_dbi - 0.5);
+        // Yansıtıcı ve son yönlendiriciler değişmez.
+        assert_eq!(m.elements[0], d.elements[0]);
+        for i in 3..d.elements.len() {
+            assert_eq!(m.elements[i], d.elements[i]);
+        }
     }
 }

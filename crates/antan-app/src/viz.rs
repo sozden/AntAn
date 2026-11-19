@@ -234,11 +234,13 @@ fn draw_axes(p: &egui::Painter, ax: &Axes, y_ticks: &[f64], y_fmt: impl Fn(f64) 
         put(p, Pos2::new(ax.plot.left() - 5.0, y), Align2::RIGHT_CENTER, small(y_fmt(v), theme::TEXT_DIM));
     }
     let step = nice_step((ax.f1 - ax.f0) / 1e6, 6) * 1e6;
+    // Basamak sayısı adıma göre (dar taramada, ör. manyetik loop, kHz farkları görünsün).
+    let dec = (-(step / 1e6).log10()).ceil().clamp(2.0, 4.0) as usize;
     let mut f = (ax.f0 / step).ceil() * step;
     while f <= ax.f1 + 1e-6 {
         let x = ax.x(f);
         p.line_segment([Pos2::new(x, ax.plot.top()), Pos2::new(x, ax.plot.bottom())], Stroke::new(1.0, theme::GRID));
-        put(p, Pos2::new(x, ax.plot.bottom() + 4.0), Align2::CENTER_TOP, small(format!("{:.2}", f / 1e6), theme::TEXT_DIM));
+        put(p, Pos2::new(x, ax.plot.bottom() + 4.0), Align2::CENTER_TOP, small(format!("{:.dec$}", f / 1e6), theme::TEXT_DIM));
         f += step;
     }
 }
@@ -379,8 +381,10 @@ pub fn smith_chart(ui: &mut egui::Ui, size: Vec2, sweep: &[SweepPoint], z0: f64,
     p.add(Shape::line(pts.clone(), Stroke::new(2.2, theme::ACCENT)));
     p.circle_filled(pts[0], 4.0, theme::ACCENT);
     p.circle_stroke(pts[pts.len() - 1], 4.5, Stroke::new(1.5, theme::ACCENT));
-    put(&p, pts[0] + Vec2::new(6.0, 0.0), Align2::LEFT_CENTER, small(format!("{:.2}", sweep[0].frequency / 1e6), theme::ACCENT));
-    put(&p, pts[pts.len() - 1] + Vec2::new(6.0, 0.0), Align2::LEFT_CENTER, small(format!("{:.2}", sweep[sweep.len() - 1].frequency / 1e6), theme::ACCENT));
+    let span = (sweep[sweep.len() - 1].frequency - sweep[0].frequency) / 1e6;
+    let dec = (-(span / 4.0).log10()).ceil().clamp(2.0, 4.0) as usize;
+    put(&p, pts[0] + Vec2::new(6.0, 0.0), Align2::LEFT_CENTER, small(format!("{:.dec$}", sweep[0].frequency / 1e6), theme::ACCENT));
+    put(&p, pts[pts.len() - 1] + Vec2::new(6.0, 0.0), Align2::LEFT_CENTER, small(format!("{:.dec$}", sweep[sweep.len() - 1].frequency / 1e6), theme::ACCENT));
     if let Some(q) = sweep.iter().min_by(|a, b| (a.frequency - design_f).abs().partial_cmp(&(b.frequency - design_f).abs()).unwrap()) {
         p.circle_filled(g2s(reflection(q.impedance, z0)), 5.0, theme::WARM);
     }

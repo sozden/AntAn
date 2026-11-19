@@ -11,6 +11,7 @@ pub mod geometry;
 pub mod i18n;
 pub mod linalg;
 pub mod loading;
+pub mod magloop;
 pub mod matching;
 pub mod material;
 pub mod mechanics;
@@ -18,6 +19,7 @@ pub mod nec;
 pub mod optimize;
 pub mod scan;
 pub mod solver;
+pub mod stack;
 pub mod templates;
 pub mod yagi;
 
